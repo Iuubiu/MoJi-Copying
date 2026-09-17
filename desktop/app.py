@@ -43,8 +43,10 @@ WINDOW_MIN = (960, 640)
 BACKGROUND = "#fbfaf7"
 
 # 前端资源清单：自检会逐个 GET 回来与源码逐字节比对，
-# 少列一个文件就等于漏检一个文件（前端在 web/ 目录下，api.js 是新增的那层）。
-WEB_FILES = ("index.html", "app.js", "api.js", "styles.css", "stats.js", "encoding.js")
+# 少列一个文件就等于漏检一个文件（前端在 web/ 目录下；api.js 是数据层，
+# manifest/sw/图标是"安装为应用"那套，少一个装出来就没有图标）。
+WEB_FILES = ("index.html", "app.js", "api.js", "styles.css", "stats.js", "encoding.js",
+             "manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png")
 
 # GUI 自检的重试预算与单次报告的落盘名。
 # 这台机器上 WebView2 有两条通道都不可靠：

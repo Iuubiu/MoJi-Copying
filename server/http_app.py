@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import http.server
 import json
+import mimetypes
 import os
 import socket
 import threading
@@ -30,6 +31,11 @@ from functools import partial
 
 from . import api, paths
 from .store import MojiStore
+
+# 浏览器只认 application/manifest+json 的 manifest，而系统的 mimetypes 表里
+# 通常没有 .webmanifest —— 不补这一条，它会被当成 octet-stream 发出去，
+# 浏览器直接忽略，"安装为应用"的入口就不会出现。
+mimetypes.add_type('application/manifest+json', '.webmanifest')
 
 BOOT_REPORT_PATH = '/__boot-report'
 API_PREFIX = '/api/'

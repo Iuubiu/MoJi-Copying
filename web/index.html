@@ -8,7 +8,12 @@
          前后端分开部署时在这里写后端地址，例如 http://127.0.0.1:8000 -->
     <meta name="moji-api" content="" />
     <title>墨迹 · 小说抄写工作台</title>
-    <link rel="stylesheet" href="styles.css?v=19" />
+    <!-- 装成应用：Edge / Chrome 地址栏会出现"安装"，装完是独立窗口，
+         和浏览器标签页分开，任务栏与开始菜单里也有它。 -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="icon-192.png" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <link rel="stylesheet" href="styles.css?v=20" />
   </head>
   <body>
     <div class="app-shell">
@@ -228,9 +233,17 @@
       <button class="nav-item" data-view="stats" type="button"><span class="nav-icon">↗</span><span>统计</span></button>
     </nav>
 
-    <script src="stats.js?v=19"></script>
-    <script src="encoding.js?v=19"></script>
-    <script src="api.js?v=19"></script>
-    <script src="app.js?v=19"></script>
+    <script src="stats.js?v=20"></script>
+    <script src="encoding.js?v=20"></script>
+    <script src="api.js?v=20"></script>
+    <script src="app.js?v=20"></script>
+    <script>
+      /* 注册 Service Worker：只为了满足浏览器"安装为应用"的条件。
+         它不缓存任何东西（见 sw.js），所以不会让页面停在旧版本上。
+         非 http(s) 打开时（比如直接双击 index.html）跳过 —— 那种情况也连不上后端。 */
+      if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      }
+    </script>
   </body>
 </html>

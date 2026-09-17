@@ -1,0 +1,16 @@
+{
+  "name": "墨迹 · 小说抄写工作台",
+  "short_name": "墨迹",
+  "description": "抄写练笔工具：左原文右抄写，逐字对照，自动记录字数与时长。",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbfaf7",
+  "theme_color": "#262726",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

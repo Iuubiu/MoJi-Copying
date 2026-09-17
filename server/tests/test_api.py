@@ -20,6 +20,8 @@ def _write_web_stub(root: str) -> None:
     os.makedirs(root, exist_ok=True)
     with open(os.path.join(root, 'index.html'), 'w', encoding='utf-8') as handle:
         handle.write('<!doctype html><html lang="zh-CN"><title>墨迹测试</title></html>')
+    with open(os.path.join(root, 'manifest.webmanifest'), 'w', encoding='utf-8') as handle:
+        handle.write('{"name": "墨迹测试", "icons": []}')
 
 
 class ApiTest(unittest.TestCase):
@@ -252,6 +254,15 @@ class ApiTest(unittest.TestCase):
         self.assertIn('PUT', headers.get('Access-Control-Allow-Methods', ''))
 
     # ── 静态资源与自检通道 ────────────────────────────────────────────
+
+    def test_manifest_is_served_with_correct_mime(self):
+        """浏览器只认 application/manifest+json 的 manifest，发成 octet-stream 就白给。"""
+        with urllib.request.urlopen(self.base + '/manifest.webmanifest', timeout=10) as response:
+            content_type = response.headers.get('Content-Type')
+            body = json.loads(response.read().decode('utf-8'))
+        self.assertEqual(response.status, 200)
+        self.assertEqual(content_type, 'application/manifest+json')
+        self.assertIn('icons', body)
 
     def test_static_index_is_served(self):
         with urllib.request.urlopen(self.base + '/index.html', timeout=10) as response:

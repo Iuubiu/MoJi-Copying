@@ -24,6 +24,10 @@ datas = [
     ('../web/styles.css', 'web'),
     ('../web/stats.js', 'web'),
     ('../web/encoding.js', 'web'),
+    ('../web/manifest.webmanifest', 'web'),
+    ('../web/sw.js', 'web'),
+    ('../web/icon-192.png', 'web'),
+    ('../web/icon-512.png', 'web'),
     # 注意：不含 "使用说明.md"。
     # 单文件 EXE 的 datas 会被解到临时目录，用户根本看不到 ——
     # 放进包里等于把说明书藏起来。它改由发布包**放在 exe 旁边**（见打包脚本）。

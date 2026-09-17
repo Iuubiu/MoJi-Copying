@@ -11,12 +11,28 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import threading
+import urllib.request
 import webbrowser
 
 from . import APP_VERSION, paths
 from .http_app import PORT_CANDIDATES, AppServer
+
+
+def running_instance(port: int) -> dict | None:
+    """这个端口上已经跑着一个墨迹吗？
+
+    双击启动器很容易连点两下，或者忘了自己已经开着 —— 再起一个服务会变成
+    两个进程写同一个数据库。探测一下：是墨迹就只把浏览器叫出来，不重复启动。
+    """
+    try:
+        with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/health', timeout=1.2) as response:
+            payload = json.loads(response.read().decode('utf-8'))
+    except Exception:  # noqa: BLE001  （端口没人听、或者应答的不是墨迹）
+        return None
+    return payload if isinstance(payload, dict) and payload.get('app') == 'MoJi' else None
 
 
 def main(argv=None) -> int:
@@ -26,8 +42,20 @@ def main(argv=None) -> int:
     parser.add_argument('--db', default=None, help='SQLite 文件路径（默认在用户数据目录）')
     parser.add_argument('--web', default=None, help='前端资源目录（默认项目里的 web/）')
     parser.add_argument('--open', dest='open_browser', action='store_true', help='启动后打开系统浏览器')
+    parser.add_argument('--force', action='store_true',
+                        help='端口上已经有墨迹在跑时，也强行再起一个实例')
     parser.add_argument('--version', action='version', version=f'Moji {APP_VERSION}')
     args = parser.parse_args(argv)
+
+    if not args.force:
+        existing = running_instance(args.port)
+        if existing:
+            url = f'http://127.0.0.1:{args.port}/index.html'
+            print(f'墨迹已经在运行（版本 {existing.get("version")}）：{url}')
+            print('要再起一个实例，加 --force')
+            if args.open_browser:
+                webbrowser.open(url)
+            return 0
 
     server = AppServer(
         root=args.web or paths.web_dir(),
