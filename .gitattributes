@@ -1,0 +1,11 @@
+# 统一换行：仓库里存 LF，检出时按平台处理。
+# 没有这一条，Windows 上提交的文件带着 CRLF 进仓库，
+# 别人在 Linux/macOS 上克隆后 diff 会满屏"整文件都改了"。
+* text=auto
+
+# 这些是二进制，别做任何换行转换
+*.ico binary
+*.exe binary
+*.zip binary
+*.png binary
+*.sqlite3 binary

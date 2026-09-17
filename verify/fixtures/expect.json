@@ -1,0 +1,30 @@
+{
+  "utf8-cn.txt": {
+    "encoding": "utf-8",
+    "sha_len": 23729
+  },
+  "utf8-bom.txt": {
+    "encoding": "utf-8",
+    "sha_len": 23732
+  },
+  "gbk-cn.txt": {
+    "encoding": "gb18030",
+    "sha_len": 15921
+  },
+  "utf16le.txt": {
+    "encoding": "utf-16le",
+    "sha_len": 16226
+  },
+  "utf16be.txt": {
+    "encoding": "utf-16be",
+    "sha_len": 16226
+  },
+  "utf8-mixed.txt": {
+    "encoding": "utf-8",
+    "sha_len": 23756
+  },
+  "gbk-mixed.txt": {
+    "encoding": "gb18030",
+    "sha_len": 15943
+  }
+}

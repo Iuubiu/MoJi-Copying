@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f3f0ea" />
+    <!-- 后端地址：留空表示与页面同源（桌面版与 python -m server 都是同源）。
+         前后端分开部署时在这里写后端地址，例如 http://127.0.0.1:8000 -->
+    <meta name="moji-api" content="" />
+    <title>墨迹 · 小说抄写工作台</title>
+    <link rel="stylesheet" href="styles.css?v=19" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">墨</div>
+          <div>
+            <div class="brand-name">墨迹</div>
+            <div class="brand-subtitle">小说抄写工作台</div>
+          </div>
+        </div>
+
+        <div class="side-section-label">我的书架 <span id="bookCount">00</span></div>
+        <div class="shelf-list" id="shelfList"></div>
+        <button class="add-book-button" id="importButton" type="button"><span>＋</span> 导入新小说</button>
+        <label class="encoding-picker"><span>TXT 编码</span><select id="encodingSelect" aria-label="TXT 编码"><option value="auto">自动识别</option><option value="utf-8">UTF-8</option><option value="gb18030">GBK / GB18030</option><option value="utf-16le">UTF-16 LE</option><option value="utf-16be">UTF-16 BE</option></select></label>
+        <input id="fileInput" type="file" accept=".txt,.md,.text" hidden />
+
+        <nav class="main-nav" aria-label="主导航">
+          <button class="nav-item active" data-view="workspace" type="button"><span class="nav-icon">▧</span> 抄写工作台</button>
+          <button class="nav-item" data-view="library" type="button"><span class="nav-icon">▤</span> 章节目录</button>
+          <button class="nav-item" data-view="stats" type="button"><span class="nav-icon">↗</span> 练习统计</button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <div class="tip-card">
+            <div class="tip-icon">✦</div>
+            <div>
+              <strong>今日小目标</strong>
+              <p id="goalText">今天还没有开始</p>
+              <div class="tip-progress"><span id="goalProgress" style="width: 0%"></span></div>
+            </div>
+          </div>
+          <div class="profile"><span class="avatar" id="avatarInitial">墨</span><span><strong id="profileName">抄书人</strong><small id="profileStreak">连续练习 0 天</small></span><button class="profile-more" id="settingsButton" type="button" aria-label="设置" title="设置">⚙</button></div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumbs"><span>我的书架</span><b>/</b><span class="current" id="breadcrumbTitle">尚未选择书籍</span><b>/</b><span class="current" id="breadcrumbChapter">尚未选择章节</span></div>
+          <div class="top-actions">
+            <span class="save-state" id="saveState"><span class="save-dot"></span> 已存入本地数据库</span>
+            <button class="icon-button mobile-import-button" id="mobileImportButton" type="button" aria-label="导入新小说" title="导入新小说">＋</button>
+            <button class="icon-button" id="focusButton" type="button" aria-label="专注模式" title="专注模式">⛶</button>
+            <button class="icon-button" id="helpButton" type="button" aria-label="帮助" title="使用提示">?</button>
+          </div>
+        </header>
+
+        <section class="workspace-view view active" id="workspaceView">
+          <div id="workspaceMain">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">正在抄写</p>
+                <h1 id="pageTitle">尚未选择章节</h1>
+                <p class="heading-meta"><span id="headingWordCount">0 字</span><i>·</i><span id="headingEstimate">预计 1 分钟</span><i>·</i><span id="lastPracticeLabel">尚未练习</span></p>
+              </div>
+              <div class="heading-actions">
+                <button class="primary-button" id="startButton" type="button"><span>▶</span> 开始抄写</button>
+              </div>
+            </div>
+
+            <div class="workspace-grid">
+              <div class="copy-card">
+                <div class="copy-toolbar">
+                  <div class="chapter-select-wrap"><span class="toolbar-label">章节</span><select id="chapterSelect" aria-label="选择章节"></select></div>
+                  <div class="toolbar-divider"></div>
+                  <div class="toolbar-group"><button class="toolbar-button" id="fontDown" type="button">A−</button><span class="font-size-label" id="fontSizeLabel">18</span><button class="toolbar-button" id="fontUp" type="button">A＋</button></div>
+                  <div class="toolbar-divider"></div>
+                  <button class="toolbar-button" id="punctButton" type="button" title="标点宽松比对">± 标点宽松</button>
+                  <button class="toolbar-button" id="proofButton" type="button" title="校对清单">✓ <span>校对清单</span></button>
+                  <button class="toolbar-button" id="toolbarSearchButton" type="button" title="全文搜索">⌕ <span>搜索</span></button>
+                  <button class="toolbar-button" id="zenButton" type="button">☼ <span>护眼</span></button>
+                  <div class="toolbar-spacer"></div>
+                  <span class="copy-mode"><span class="mode-dot"></span><span id="modeText">准备就绪</span></span>
+                </div>
+
+                <div class="sentence-bar" id="sentenceBar">
+                  <span class="sentence-label">当前句</span>
+                  <span class="sentence-text" id="sentenceText">把光标放进正文，这里会显示你正在抄的那一句。</span>
+                  <span class="sentence-meta" id="sentenceMeta"></span>
+                </div>
+
+                <div class="proof-panel" id="proofPanel" hidden>
+                  <div class="proof-head"><span>校对清单</span><span class="proof-count" id="proofCount"></span><button class="close-button" id="proofClose" type="button" aria-label="收起校对清单">×</button></div>
+                  <div class="proof-list" id="proofList"></div>
+                </div>
+
+                <div class="copy-body" id="copyBody">
+                  <div class="source-column">
+                    <div class="column-label"><span>原文</span><small>黑色参考</small></div>
+                    <div class="source-text" id="sourceText"><div class="source-track" id="sourceTrack"></div></div>
+                  </div>
+                  <div class="writing-column">
+                    <div class="column-label"><span>你的抄写</span><small id="writingHint">点击右侧开始输入</small></div>
+                    <div class="writing-stage" id="writingStage">
+                      <div class="writing-paper" id="writingPaper">
+                        <div class="typing-display" id="typingDisplay" aria-hidden="true"></div>
+                        <textarea id="writingArea" spellcheck="false" aria-label="抄写输入区" placeholder=""></textarea>
+                        <div class="caret-guide" id="caretGuide">从这里开始，把文字写进时间里。</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="copy-footer"><span><kbd>Tab</kbd> 下一章</span><span><kbd>⌘</kbd>＋<kbd>Enter</kbd> 完成章节</span><span class="footer-spacer"></span><span id="charCount">0 / 0 字</span></div>
+              </div>
+
+              <aside class="insight-panel">
+                <div class="panel-title-row"><h2>本章进度</h2><span class="quiet-status"><span></span> 数据库保存</span></div>
+                <div class="progress-hero"><div class="ring" id="progressRing"><div><strong id="progressPercent">0%</strong><small>完成度</small></div></div><div><div class="progress-big-label" id="progressLabel">准备开始</div><p id="progressSubLabel">写下第一个字，旅程就开始了。</p></div></div>
+                <div class="metric-grid"><div class="metric"><span>已抄写</span><strong id="writtenMetric">0 <small>字</small></strong></div><div class="metric"><span>本次时长</span><strong id="durationMetric">00:00</strong></div><div class="metric"><span>平均速度</span><strong id="speedMetric">— <small>字/分</small></strong></div><div class="metric"><span>错误字数</span><strong id="errorMetric">0 <small>字</small></strong></div></div>
+                <div class="panel-divider"></div>
+                <div class="practice-note"><div class="section-heading"><h3>抄写提示</h3><span class="quiet-status">逐字校对</span></div><p>先看完整句子，再落笔。黑色表示与原文一致，红色表示当前字与原文有偏差。开启「标点宽松」后，全角/半角与中英文引号的差异不再算错字。</p><div class="legend-row"><span><i class="legend-dot correct"></i>正确</span><span><i class="legend-dot incorrect"></i>需检查</span></div></div>
+                <div class="panel-divider"></div>
+                <div class="next-chapter"><div><span class="next-label">下一章</span><strong id="nextChapterName">—</strong></div><button class="round-arrow" id="nextButton" type="button">→</button></div>
+              </aside>
+            </div>
+          </div>
+
+          <div class="empty-state" id="emptyState" hidden>
+            <div class="empty-mark">墨</div>
+            <h2>书架还是空的</h2>
+            <p>导入一个 .txt / .md 文件，应用会自动识别编码、切分章节，并在这里显示原文与抄写区。</p>
+            <button class="primary-button" id="emptyImportButton" type="button"><span>＋</span> 导入文本</button>
+          </div>
+        </section>
+
+        <section class="library-view view" id="libraryView">
+          <div class="page-heading compact">
+            <div><p class="eyebrow">内容管理</p><h1>章节目录</h1><p class="heading-meta"><span id="libraryBookMeta">尚未导入文本</span><i>·</i><span>已缓存到本地</span></p></div>
+            <button class="secondary-button" id="libraryImportButton" type="button"><span>＋</span> 导入文本</button>
+          </div>
+          <div class="library-progress"><span class="library-progress-label" id="libraryProgressText">—</span><div class="library-progress-track"><span id="libraryProgressBar" style="width:0%"></span></div></div>
+          <div class="search-bar">
+            <input id="searchInput" type="search" placeholder="全文搜索：章节标题与正文，回车开始" aria-label="全文搜索" />
+            <button class="secondary-button" id="searchButton" type="button">搜索</button>
+            <button class="secondary-button" id="searchClear" type="button">清除</button>
+          </div>
+          <p class="search-summary" id="searchSummary"></p>
+          <div class="search-results" id="searchResults" hidden></div>
+          <div class="library-card" id="libraryCard"></div>
+        </section>
+
+        <section class="stats-view view" id="statsView">
+          <div class="page-heading compact"><div><p class="eyebrow">练习记录</p><h1>练习统计</h1><p class="heading-meta"><span>全部数字来自本地练习记录，实时更新</span></p></div></div>
+          <div class="stats-grid">
+            <div class="stat-summary-card"><span>累计抄写字数</span><strong id="totalWordsStat">0</strong><small id="totalWordsMeta">今天尚未开始</small></div>
+            <div class="stat-summary-card"><span>累计练习时长</span><strong id="totalTimeStat">0 分钟</strong><small id="totalTimeMeta">共 0 次练习</small></div>
+            <div class="stat-summary-card"><span>平均速度</span><strong id="avgSpeedStat">—</strong><small id="avgSpeedMeta">完成一段练习后显示</small></div>
+          </div>
+
+          <div class="streak-row">
+            <div class="streak-badge"><span>♨</span><strong id="streakStat">0 天</strong><small>连续练习</small></div>
+            <div class="streak-badge ghost"><span>❋</span><strong id="longestStreakStat">0 天</strong><small>最长连续</small></div>
+          </div>
+
+          <div class="chart-card">
+            <div class="section-heading"><div><h2>最近 7 天</h2><p id="weekRangeLabel">—</p></div><span class="chart-legend"><i></i> <span id="chartLegendLabel">每日抄写字数</span></span></div>
+            <div class="week-metrics">
+              <div class="week-metric"><span>抄写字数</span><strong id="statWords7">0</strong><small class="change" id="compareWords"></small></div>
+              <div class="week-metric"><span>练习时长</span><strong id="statTime7">0 分钟</strong><small class="change" id="compareTime"></small></div>
+              <div class="week-metric"><span>平均速度</span><strong id="statSpeed7">—</strong><small class="change" id="compareSpeed"></small></div>
+              <div class="week-metric"><span>正确率</span><strong id="statAccuracy7">—</strong><small class="change" id="compareAccuracy"></small></div>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="section-heading"><div><h2>每日趋势</h2><p>最近 7 天</p></div><div class="metric-switch"><button class="active" data-stats-metric="words" type="button">字数</button><button data-stats-metric="durationMs" type="button">时长</button></div></div>
+            <div class="bar-chart" id="barChart"></div><div class="chart-days" id="chartDays"></div>
+          </div>
+
+          <div class="chart-card">
+            <div class="section-heading"><div><h2>最近练习</h2><p>最近 8 次明细</p></div></div>
+            <div class="session-list" id="sessionList"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+
+    <!-- 存储提示：后端连不上时顶上，不遮挡正文，可随手关掉 -->
+    <div class="storage-notice" id="storageNotice" data-level="info" hidden>
+      <span class="storage-notice-dot" aria-hidden="true"></span>
+      <span data-notice-text></span>
+      <button class="storage-notice-close" id="storageNoticeClose" type="button" aria-label="关闭提示">×</button>
+    </div>
+
+    <div class="modal-backdrop" id="helpModal" hidden><div class="modal help-modal"><div class="modal-header"><div><p class="eyebrow">快速上手</p><h2>让抄写成为阅读</h2></div><button class="close-button" data-close="helpModal" type="button">×</button></div><div class="help-grid"><div><span>01</span><strong>导入文本</strong><p>支持 .txt / .md，自动识别 UTF-8 / GBK / UTF-16 编码，并识别“第一章”“Chapter 1”等章节标题。每段会自动补上首行缩进。</p></div><div><span>02</span><strong>对照抄写</strong><p>左侧黑色原文作为参照，右侧输入会逐字校对。开启「标点宽松」后，全角/半角与中英文引号的差异不再算错字。按回车会自动带入原文下一行的缩进。</p></div><div><span>03</span><strong>校对与检索</strong><p>「校对清单」列出每一处偏差，点击即可跳到那个字；工具栏下方显示当前所在句；章节目录支持全文搜索与逐章重置。</p></div><div><span>04</span><strong>记录与备份</strong><p>练习时长与字数每 5 秒自动存入本地数据库，切章节、切标签页、关窗口时自动结算，下次打开接着来。设置里可以导出/导入 JSON 备份。</p></div></div></div></div>
+
+    <div class="modal-backdrop" id="bookEditModal" hidden><div class="modal book-edit-modal"><div class="modal-header"><div><p class="eyebrow">书架管理</p><h2>编辑书籍</h2></div><button class="close-button" data-close="bookEditModal" type="button">×</button></div><label class="field-label">书名<input id="editBookTitle" type="text" /></label><label class="field-label">作者<input id="editBookAuthor" type="text" /></label><div class="modal-actions"><button class="danger-button" id="deleteBookButton" type="button">从书架删除</button><span class="actions-spacer"></span><button class="secondary-button" data-close="bookEditModal" type="button">取消</button><button class="primary-button" id="saveBookMeta" type="button">保存修改</button></div></div></div>
+
+    <div class="modal-backdrop" id="settingsModal" hidden><div class="modal settings-modal">
+      <div class="modal-header"><div><p class="eyebrow">偏好设置</p><h2>设置与备份</h2></div><button class="close-button" data-close="settingsModal" type="button">×</button></div>
+      <label class="field-label">昵称<input id="nicknameInput" type="text" placeholder="留空则显示「抄书人」" /></label>
+      <label class="field-label">每日目标（字）<input id="goalInput" type="number" min="50" max="100000" step="50" /></label>
+      <label class="toggle-row"><input id="punctToggle" type="checkbox" /><span><strong>标点宽松比对</strong><small>全角/半角、中英文引号的差异不再算错字</small></span></label>
+      <div class="panel-divider"></div>
+      <div class="settings-group">
+        <div class="settings-group-head"><strong>备份与恢复</strong><small>导出为 JSON，含书籍、进度、练习记录与设置</small></div>
+        <div class="modal-actions left"><button class="secondary-button" id="exportButton" type="button">导出备份</button><label class="secondary-button file-button">导入备份<input id="backupInput" type="file" accept=".json,application/json" hidden /></label></div>
+        <div class="radio-row">
+          <label><input type="radio" name="importMode" id="importModeMerge" value="merge" checked /> 合并（保留现有数据，同 id 覆盖）</label>
+          <label><input type="radio" name="importMode" id="importModeOverwrite" value="overwrite" /> 覆盖（先清空本地数据）</label>
+        </div>
+      </div>
+      <div class="panel-divider"></div>
+      <div class="settings-group">
+        <div class="settings-group-head"><strong>练习记录</strong><small>清空统计、连续天数与每日目标进度；书籍与抄写进度保留</small></div>
+        <div class="modal-actions left"><button class="danger-button" id="clearRecords" type="button">清空练习记录</button></div>
+      </div>
+      <div class="modal-actions"><button class="secondary-button" data-close="settingsModal" type="button">取消</button><button class="primary-button" id="saveSettings" type="button">保存设置</button></div>
+    </div></div>
+
+    <nav class="mobile-nav" aria-label="移动端主导航">
+      <button class="nav-item active" data-view="workspace" type="button"><span class="nav-icon">▧</span><span>工作台</span></button>
+      <button class="nav-item" data-view="library" type="button"><span class="nav-icon">▤</span><span>目录</span></button>
+      <button class="nav-item" data-view="stats" type="button"><span class="nav-icon">↗</span><span>统计</span></button>
+    </nav>
+
+    <script src="stats.js?v=19"></script>
+    <script src="encoding.js?v=19"></script>
+    <script src="api.js?v=19"></script>
+    <script src="app.js?v=19"></script>
+  </body>
+</html>
