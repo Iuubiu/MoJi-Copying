@@ -36,7 +36,7 @@ from server.http_app import AppServer         # noqa: E402
 APP_NAME = "墨迹"
 APP_SUBTITLE = "小说抄写工作台"
 APP_ID = "MoJi"
-VERSION = "2.0.0"
+VERSION = "0.1.0"
 
 WINDOW_DEFAULT = (1440, 900)
 WINDOW_MIN = (960, 640)

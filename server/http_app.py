@@ -53,7 +53,7 @@ def port_is_free(port: int, host: str = '127.0.0.1') -> bool:
 
 class _Handler(http.server.SimpleHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
-    server_version = 'MoJi/2.0'
+    server_version = 'MoJi/0.1'
 
     def log_message(self, *_args):  # 访问日志静音；错误仍会走 stderr
         pass
