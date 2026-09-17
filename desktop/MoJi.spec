@@ -1,13 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""墨迹 · 小说抄写工作台 —— 桌面版打包配置（单文件、无控制台窗口）。
+"""墨迹 · 小说抄写工作台 —— 桌面版打包配置（目录模式、无控制台窗口）。
 
     cd desktop
     "C:/Users/Yhwhy/.workbuddy/binaries/python/envs/default/Scripts/python.exe" \
         -m PyInstaller MoJi.spec --noconfirm \
         --distpath "../outputs/Windows" --workpath build
 
-（这个 spec 里的 .venv 路径是早期写法，本机实际用的是上面的受管环境；
-   PyInstaller 6.22.3 + pywebview，Python 3.13）
+产出 outputs/Windows/MoJi/（MoJi.exe + _internal/），
+再由 make_release.py 连同「使用说明.md」打成发布 zip。
+
+（上面那条 python 路径是本机打包环境：PyInstaller 6.22.3 + pywebview，Python 3.13；
+   项目的开发/运行用的是另一套 Python，两边互不影响。）
 
 前端资源直接引用项目根目录的那一份（不复制、不生成第二份），
 避免出现"改了源码但打进包里的还是旧文件"。
@@ -65,10 +68,8 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,          # 目录模式：依赖不进 exe，放在 _internal/ 里
     name='MoJi',
     debug=False,
     bootloader_ignore_signals=False,
@@ -79,4 +80,15 @@ exe = EXE(
     disable_windowed_traceback=False,
     icon='MoJi.ico',
     version=None,
+)
+
+# 目录模式（onedir）而不是单文件：单文件每次启动都要把自己解压到临时目录，
+# 冷启动要好几秒，杀软也更容易盯上；目录模式启动快得多，代价是产物是一个文件夹。
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    name='MoJi',
 )
