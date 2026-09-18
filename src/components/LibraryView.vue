@@ -83,6 +83,21 @@ const rows = computed(() => {
   });
 });
 
+/** 按卷分组。没有卷标的书只有一组（标题为空，不渲染分组行）。 */
+const grouped = computed(() => {
+  const groups = [];
+  let current = null;
+  rows.value.forEach(row => {
+    const title = row.chapter.volume || '';
+    if (!current || current.title !== title) {
+      current = { title, rows: [] };
+      groups.push(current);
+    }
+    current.rows.push(row);
+  });
+  return groups;
+});
+
 async function resetChapter(index) {
   const chapter = book.value && book.value.chapters[index];
   if (!chapter) return;
@@ -163,25 +178,36 @@ async function deleteBook() {
       </button>
     </div>
 
+    <details v-if="book && book.summary" class="summary-card">
+      <summary>内容简介 <small>原文里的「内容简介」被单独收在这里，不混进正文</small></summary>
+      <p>{{ book.summary }}</p>
+    </details>
+
     <div class="library-card">
-      <div v-for="row in rows" :key="row.index" class="chapter-row"
-           :class="{ active: row.index === state.chapterIndex }"
-           @click="state.chapterIndex = row.index; state.view = 'workspace'">
-        <span class="chapter-index">{{ String(row.index + 1).padStart(2, '0') }}</span>
-        <div class="chapter-main">
-          <strong>{{ row.chapter.title }}</strong>
-          <small>
-            {{ formatNumber(row.length) }} 字 · {{ row.percent ? `已抄写 ${row.percent}%` : '尚未开始' }}
-            <template v-if="row.chapter.timeSpentMs"> · {{ formatDuration(row.chapter.timeSpentMs) }}</template>
-          </small>
+      <template v-for="group in grouped" :key="group.title || 'no-volume'">
+        <div v-if="group.title" class="volume-row">
+          <span>{{ group.title }}</span>
+          <small>{{ group.rows.length }} 章</small>
         </div>
-        <div class="chapter-progress"><span :style="{ width: row.percent + '%' }"></span></div>
-        <span class="chapter-percent">{{ row.percent }}%</span>
-        <div class="chapter-actions">
-          <button class="chapter-action" type="button" title="重置本章进度" @click.stop="resetChapter(row.index)">重置</button>
-          <button class="chapter-action danger" type="button" title="删除本章" @click.stop="deleteChapter(row.index)">删除</button>
+        <div v-for="row in group.rows" :key="row.index" class="chapter-row"
+             :class="{ active: row.index === state.chapterIndex }"
+             @click="state.chapterIndex = row.index; state.view = 'workspace'">
+          <span class="chapter-index">{{ String(row.index + 1).padStart(2, '0') }}</span>
+          <div class="chapter-main">
+            <strong>{{ row.chapter.title }}</strong>
+            <small>
+              {{ formatNumber(row.length) }} 字 · {{ row.percent ? `已抄写 ${row.percent}%` : '尚未开始' }}
+              <template v-if="row.chapter.timeSpentMs"> · {{ formatDuration(row.chapter.timeSpentMs) }}</template>
+            </small>
+          </div>
+          <div class="chapter-progress"><span :style="{ width: row.percent + '%' }"></span></div>
+          <span class="chapter-percent">{{ row.percent }}%</span>
+          <div class="chapter-actions">
+            <button class="chapter-action" type="button" title="重置本章进度" @click.stop="resetChapter(row.index)">重置</button>
+            <button class="chapter-action danger" type="button" title="删除本章" @click.stop="deleteChapter(row.index)">删除</button>
+          </div>
         </div>
-      </div>
+      </template>
 
       <button v-if="book && book.chapters.length > limit" class="load-more" type="button" @click="limit += CHAPTER_PAGE">
         还有 {{ formatNumber(book.chapters.length - limit) }} 章，点击加载

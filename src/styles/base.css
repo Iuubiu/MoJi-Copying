@@ -99,6 +99,16 @@ h1 em { color: #b6b3a9; font-style: normal; padding: 0 4px; }
 .secondary-button:hover { border-color: #c9c8bf; background: #fff; }
 .workspace-grid { display: grid; flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) 260px; grid-template-rows: minmax(0, 1fr); gap: 22px; align-items: stretch; overflow: hidden; }
 .copy-card, .insight-panel, .library-card, .chart-card, .stat-summary-card { background: var(--card); border: 1px solid #e7e3db; border-radius: 12px; box-shadow: var(--shadow); }
+/* 内容简介：原文里的「内容简介」被单独收在这里，读之前先看一眼，也不混进正文 */
+.summary-card { background: var(--card); border: 1px solid #e7e3db; border-radius: 12px; box-shadow: var(--shadow); padding: 12px 18px; margin-bottom: 14px; }
+.summary-card summary { cursor: pointer; color: #6d736c; font-size: 12px; }
+.summary-card summary small { color: #b0b0a9; margin-left: 8px; font-size: 10px; }
+.summary-card p { margin: 10px 0 2px; color: #5c605a; font-size: 12px; line-height: 1.9; white-space: pre-wrap; }
+/* 分卷标题行：卷标只是分组，不是能抄的章节，所以做成一行标签而不是章节卡片 */
+.volume-row { display: flex; align-items: baseline; gap: 10px; padding: 15px 18px 7px; border-top: 1px solid var(--line); }
+.volume-row:first-child { border-top: 0; }
+.volume-row span { color: #6d736c; font-size: 12px; font-weight: 600; letter-spacing: .4px; }
+.volume-row small { color: #b0b0a9; font-size: 10px; }
 .copy-card { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .insight-panel { min-height: 0; overflow-y: auto; }
 .copy-toolbar { min-height: 48px; border-bottom: 1px solid var(--line); padding: 0 17px; display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 10px; }

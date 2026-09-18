@@ -26,7 +26,9 @@ import threading
 import time
 from contextlib import contextmanager
 
-SCHEMA_VERSION = 1
+# 2：books 加 summary、chapters 加 volume（识别书名/简介/分卷）。老库由
+# _upgrade_schema 补列，不重建表。
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -38,6 +40,7 @@ CREATE TABLE IF NOT EXISTS books (
   id         TEXT PRIMARY KEY,
   title      TEXT    NOT NULL DEFAULT '',
   author     TEXT    NOT NULL DEFAULT '',
+  summary    TEXT    NOT NULL DEFAULT '',
   updated_at INTEGER NOT NULL DEFAULT 0
 );
 
@@ -45,6 +48,7 @@ CREATE TABLE IF NOT EXISTS chapters (
   book_id TEXT    NOT NULL,
   idx     INTEGER NOT NULL,
   title   TEXT    NOT NULL DEFAULT '',
+  volume  TEXT    NOT NULL DEFAULT '',
   content TEXT    NOT NULL DEFAULT '',
   PRIMARY KEY (book_id, idx)
 );
@@ -135,11 +139,27 @@ class MojiStore:
             with self._connect() as conn:
                 conn.execute('PRAGMA journal_mode = WAL')
                 conn.executescript(_SCHEMA)
+                self._upgrade_schema(conn)
                 conn.execute(
                     'INSERT INTO meta(key, value) VALUES(?, ?) '
                     'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
                     ('schema_version', str(SCHEMA_VERSION)),
                 )
+
+    @staticmethod
+    def _upgrade_schema(conn) -> None:
+        """老库补列。
+
+        CREATE TABLE IF NOT EXISTS 对已经建好的表一个字都不会改 ——
+        老用户的库里没有 summary / volume，不补的话读出来永远是空的。
+        """
+        for table, column, decl in (
+            ('books', 'summary', "TEXT NOT NULL DEFAULT ''"),
+            ('chapters', 'volume', "TEXT NOT NULL DEFAULT ''"),
+        ):
+            existing = {row['name'] for row in conn.execute(f'PRAGMA table_info({table})')}
+            if column not in existing:
+                conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} {decl}')
 
     # ── 读取 ──────────────────────────────────────────────────────────────
 
@@ -155,9 +175,9 @@ class MojiStore:
         这样前端的数据层只是"换了传输方式"，业务代码一行不用动。"""
         with self._connect() as conn:
             books = [dict(row) for row in conn.execute(
-                'SELECT id, title, author, updated_at FROM books ORDER BY updated_at DESC')]
+                'SELECT id, title, author, summary, updated_at FROM books ORDER BY updated_at DESC')]
             chapters = [dict(row) for row in conn.execute(
-                'SELECT book_id, idx, title, content FROM chapters ORDER BY book_id, idx')]
+                'SELECT book_id, idx, title, volume, content FROM chapters ORDER BY book_id, idx')]
             progress = [dict(row) for row in conn.execute(
                 'SELECT id, book_id, idx, written, elapsed_ms, updated_at FROM progress')]
             sessions = [dict(row) for row in conn.execute(
@@ -175,7 +195,8 @@ class MojiStore:
                 'book': {
                     'title': row['title'],
                     'author': row['author'],
-                    'chapters': [{'title': c['title'], 'content': c['content']}
+                    'summary': row['summary'],
+                    'chapters': [{'title': c['title'], 'volume': c['volume'], 'content': c['content']}
                                  for c in by_book.get(row['id'], [])],
                 },
                 'updatedAt': row['updated_at'],
@@ -252,10 +273,11 @@ class MojiStore:
 
         with self._connect() as conn:
             conn.execute(
-                'INSERT INTO books(id, title, author, updated_at) VALUES(?, ?, ?, ?) '
+                'INSERT INTO books(id, title, author, summary, updated_at) VALUES(?, ?, ?, ?, ?) '
                 'ON CONFLICT(id) DO UPDATE SET title = excluded.title, author = excluded.author, '
-                'updated_at = excluded.updated_at',
-                (book_id, _text(book.get('title'), '未命名书籍'), _text(book.get('author'), '本地文本'), updated_at),
+                'summary = excluded.summary, updated_at = excluded.updated_at',
+                (book_id, _text(book.get('title'), '未命名书籍'), _text(book.get('author'), '本地文本'),
+                 _text(book.get('summary')), updated_at),
             )
             conn.execute('DELETE FROM chapters WHERE book_id = ?', (book_id,))
             conn.execute('DELETE FROM progress WHERE book_id = ?', (book_id,))
@@ -263,9 +285,9 @@ class MojiStore:
                 if not isinstance(chapter, dict):
                     continue
                 conn.execute(
-                    'INSERT INTO chapters(book_id, idx, title, content) VALUES(?, ?, ?, ?)',
+                    'INSERT INTO chapters(book_id, idx, title, volume, content) VALUES(?, ?, ?, ?, ?)',
                     (book_id, index, _text(chapter.get('title'), f'第 {index + 1} 章'),
-                     _text(chapter.get('content'))),
+                     _text(chapter.get('volume')), _text(chapter.get('content'))),
                 )
                 conn.execute(
                     'INSERT INTO progress(id, book_id, idx, written, elapsed_ms, updated_at) '
@@ -436,11 +458,11 @@ class MojiStore:
                 if not book_id:
                     continue
                 conn.execute(
-                    'INSERT INTO books(id, title, author, updated_at) VALUES(?, ?, ?, ?) '
+                    'INSERT INTO books(id, title, author, summary, updated_at) VALUES(?, ?, ?, ?, ?) '
                     'ON CONFLICT(id) DO UPDATE SET title = excluded.title, author = excluded.author, '
-                    'updated_at = excluded.updated_at',
+                    'summary = excluded.summary, updated_at = excluded.updated_at',
                     (book_id, _text(book.get('title'), '未命名书籍'), _text(book.get('author'), '本地文本'),
-                     _number(record.get('updatedAt'), now)),
+                     _text(book.get('summary')), _number(record.get('updatedAt'), now)),
                 )
                 imported_books += 1
                 if not chapters:
@@ -450,9 +472,9 @@ class MojiStore:
                     if not isinstance(chapter, dict):
                         continue
                     conn.execute(
-                        'INSERT INTO chapters(book_id, idx, title, content) VALUES(?, ?, ?, ?)',
+                        'INSERT INTO chapters(book_id, idx, title, volume, content) VALUES(?, ?, ?, ?, ?)',
                         (book_id, index, _text(chapter.get('title'), f'第 {index + 1} 章'),
-                         _text(chapter.get('content'))),
+                         _text(chapter.get('volume')), _text(chapter.get('content'))),
                     )
 
             for record in progress:

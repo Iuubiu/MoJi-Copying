@@ -18,7 +18,9 @@ use serde_json::{json, Map, Value};
 
 pub type Result<T> = std::result::Result<T, String>;
 
-const SCHEMA_VERSION: i64 = 1;
+/// 2：books 加 summary、chapters 加 volume（识别书名/简介/分卷）。
+/// 老库由 upgrade_schema 补列，不重建表。
+const SCHEMA_VERSION: i64 = 2;
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS meta (
@@ -30,6 +32,7 @@ CREATE TABLE IF NOT EXISTS books (
   id         TEXT PRIMARY KEY,
   title      TEXT    NOT NULL DEFAULT '',
   author     TEXT    NOT NULL DEFAULT '',
+  summary    TEXT    NOT NULL DEFAULT '',
   updated_at INTEGER NOT NULL DEFAULT 0
 );
 
@@ -37,6 +40,7 @@ CREATE TABLE IF NOT EXISTS chapters (
   book_id TEXT    NOT NULL,
   idx     INTEGER NOT NULL,
   title   TEXT    NOT NULL DEFAULT '',
+  volume  TEXT    NOT NULL DEFAULT '',
   content TEXT    NOT NULL DEFAULT '',
   PRIMARY KEY (book_id, idx)
 );
@@ -170,6 +174,34 @@ fn portable_dir() -> Option<PathBuf> {
     }
 }
 
+/// 老库升级：给已经存在的表补上后来加的列。
+///
+/// `CREATE TABLE IF NOT EXISTS` 对建好的表一个字都不会改 —— 老用户的库里
+/// 没有 summary / volume，不补的话读出来永远是空的。
+fn upgrade_schema(conn: &Connection) -> Result<()> {
+    for (table, column, decl) in [
+        ("books", "summary", "TEXT NOT NULL DEFAULT ''"),
+        ("chapters", "volume", "TEXT NOT NULL DEFAULT ''"),
+    ] {
+        let mut stmt = conn
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .map_err(|e| e.to_string())?;
+        let existing: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| e.to_string())?
+            .filter_map(std::result::Result::ok)
+            .collect();
+        if !existing.iter().any(|name| name == column) {
+            conn.execute(
+                &format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"),
+                [],
+            )
+            .map_err(|e| format!("补列 {table}.{column} 失败：{e}"))?;
+        }
+    }
+    Ok(())
+}
+
 /* ── Store ────────────────────────────────────────────────────────────── */
 
 pub struct Store {
@@ -203,6 +235,7 @@ impl Store {
         conn.execute_batch("PRAGMA journal_mode = WAL;")
             .map_err(|e| format!("开启 WAL 失败：{e}"))?;
         conn.execute_batch(SCHEMA).map_err(|e| format!("建表失败：{e}"))?;
+        upgrade_schema(&conn)?;
         conn.execute(
             "INSERT INTO meta(key, value) VALUES('schema_version', ?1) \
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -234,7 +267,7 @@ impl Store {
         let mut chapters_by_book: Map<String, Value> = Map::new();
         {
             let mut stmt = conn
-                .prepare("SELECT book_id, idx, title, content FROM chapters ORDER BY book_id, idx")
+                .prepare("SELECT book_id, idx, title, volume, content FROM chapters ORDER BY book_id, idx")
                 .map_err(|e| e.to_string())?;
             let rows = stmt
                 .query_map([], |row| {
@@ -242,7 +275,8 @@ impl Store {
                         row.get::<_, String>(0)?,
                         json!({
                             "title": row.get::<_, String>(2)?,
-                            "content": row.get::<_, String>(3)?,
+                            "volume": row.get::<_, String>(3)?,
+                            "content": row.get::<_, String>(4)?,
                         }),
                     ))
                 })
@@ -260,7 +294,7 @@ impl Store {
 
         let books = {
             let mut stmt = conn
-                .prepare("SELECT id, title, author, updated_at FROM books ORDER BY updated_at DESC")
+                .prepare("SELECT id, title, author, summary, updated_at FROM books ORDER BY updated_at DESC")
                 .map_err(|e| e.to_string())?;
             let rows = stmt
                 .query_map([], |row| {
@@ -268,19 +302,21 @@ impl Store {
                         row.get::<_, String>(0)?,
                         row.get::<_, String>(1)?,
                         row.get::<_, String>(2)?,
-                        row.get::<_, i64>(3)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, i64>(4)?,
                     ))
                 })
                 .map_err(|e| e.to_string())?
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(|e| e.to_string())?;
             rows.into_iter()
-                .map(|(id, title, author, updated_at)| {
+                .map(|(id, title, author, summary, updated_at)| {
                     json!({
                         "id": id,
                         "book": {
                             "title": title,
                             "author": author,
+                            "summary": summary,
                             "chapters": chapters_by_book.get(&id).cloned().unwrap_or_else(|| json!([])),
                         },
                         "updatedAt": updated_at,
@@ -386,13 +422,14 @@ impl Store {
         let mut conn = self.conn()?;
         let tx = conn.transaction().map_err(|e| e.to_string())?;
         tx.execute(
-            "INSERT INTO books(id, title, author, updated_at) VALUES(?1, ?2, ?3, ?4) \
+            "INSERT INTO books(id, title, author, summary, updated_at) VALUES(?1, ?2, ?3, ?4, ?5) \
              ON CONFLICT(id) DO UPDATE SET title = excluded.title, author = excluded.author, \
-             updated_at = excluded.updated_at",
+             summary = excluded.summary, updated_at = excluded.updated_at",
             params![
                 book_id,
                 fallback(&text(book.get("title")), "未命名书籍"),
                 fallback(&text(book.get("author")), "本地文本"),
+                text(book.get("summary")),
                 updated_at
             ],
         )
@@ -408,8 +445,14 @@ impl Store {
             }
             let title = fallback(&text(chapter.get("title")), &format!("第 {} 章", index + 1));
             tx.execute(
-                "INSERT INTO chapters(book_id, idx, title, content) VALUES(?1, ?2, ?3, ?4)",
-                params![book_id, index as i64, title, text(chapter.get("content"))],
+                "INSERT INTO chapters(book_id, idx, title, volume, content) VALUES(?1, ?2, ?3, ?4, ?5)",
+                params![
+                    book_id,
+                    index as i64,
+                    title,
+                    text(chapter.get("volume")),
+                    text(chapter.get("content"))
+                ],
             )
             .map_err(|e| e.to_string())?;
             tx.execute(

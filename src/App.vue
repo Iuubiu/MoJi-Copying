@@ -135,8 +135,13 @@ async function handleFile(event) {
 
     settleSession();
     const id = createBookId();
-    const title = file.name.replace(/\.(txt|md|text)$/i, '').trim() || '未命名小说';
-    const book = normalizeBook({ title, author: '本地文本', chapters: parsed.chapters }, id);
+    /* 正文里认出了书名/作者就用它，认不出再退回文件名 */
+    const title = parsed.title || file.name.replace(/\.(txt|md|text)$/i, '').trim() || '未命名小说';
+    const author = parsed.author || '本地文本';
+    const book = normalizeBook(
+      { title, author, summary: parsed.summary, chapters: parsed.chapters },
+      id,
+    );
     state.library.unshift({ id, book });
     state.bookId = id;
     state.chapterIndex = 0;
@@ -144,7 +149,10 @@ async function handleFile(event) {
     await persistBook(id, book);
     state.view = 'workspace';
     workbench.value?.refreshAll();
-    showToast(`已导入《${book.title}》，${book.chapters.length} 个章节（${MojiEncoding.encodingLabel(parsed.encoding)}）`);
+    const volumes = new Set(book.chapters.map(chapter => chapter.volume).filter(Boolean));
+    const summary = [`共 ${book.chapters.length} 章`];
+    if (volumes.size) summary.unshift(`${volumes.size} 卷`);
+    showToast(`已导入《${book.title}》，${summary.join(' · ')}（${MojiEncoding.encodingLabel(parsed.encoding)}）`);
   } catch (error) {
     console.warn('[墨迹] 导入失败：', error);
     showToast('导入失败，请切换 TXT 编码后重试');

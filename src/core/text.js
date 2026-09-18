@@ -17,6 +17,132 @@ export function isChapterHeading(line) {
   return CHAPTER_HEADING.test(line);
 }
 
+/** 分卷标题：第X部 / 第X卷 / 第X篇 / 第X集 / 卷X / 上卷。跟"章"是两码事。 */
+const VOLUME_HEADING = /^\s*(?:第\s*[零一二三四五六七八九十百千万两\d]+\s*[部卷篇集]|卷\s*[零一二三四五六七八九十百千万两\d]+|[上中下]卷)/;
+
+export function isVolumeHeading(line) {
+  return VOLUME_HEADING.test(line);
+}
+
+/* ── 广告与水印 ──────────────────────────────────────────────────────── */
+
+/** 纯符号分隔线：一连串的 = - * # ~ _ 之类，正文里不会这样成行。 */
+const AD_RULE = /^[\s=\-*#~_—－·•.]{6,}$/;
+/** 强信号：站点名、网址、推广语。这些词在正文里几乎不会成行出现。 */
+const AD_SIGNAL = /(?:知轩藏书|笔趣阁|请记住本站|请记住我们|精校|全集下载|电子书下载|txt下载|无弹窗|永久免费|手机阅读|手机版阅读|加入书架|首发于|首发自|书友群|求订阅|求月票|求推荐票|最新章节|www\.|https?:\/\/)/i;
+/** 组合信号：推广动作 + 作品/站点，两个同时出现才算。 */
+const AD_PROMO = /(?:下载|阅读|收藏|推荐|首发|更新|全集|免费|订阅|尽在|更多)/;
+const AD_TARGET = /(?:小说|书籍|文学|电子书|网|站|txt)/i;
+
+/**
+ * 这一行是不是夹杂的广告 / 水印？
+ *
+ * 判定要保守：**宁可放过，不可误杀** —— 正文被当广告吃掉是不可逆的，
+ * 而漏掉一行广告只是抄写时多打几个字。所以：
+ *   · 长行一律不判（60 字以上基本是正文）；
+ *   · 组合信号只认 30 字以内的短行，而且不能带句读 ——
+ *     "他翻开那本从网上下载来的旧档案。"这种句子会同时命中"下载"和"网"，
+ *     但它显然不是广告行。
+ */
+export function isAdLine(line) {
+  const text = String(line || '').trim();
+  if (!text) return false;
+  if (AD_RULE.test(text)) return true;
+  if (text.length > 60) return false;
+  if (AD_SIGNAL.test(text)) return true;
+  if (text.length > 30) return false;
+  if (/[。！？；]/.test(text)) return false;
+  return AD_PROMO.test(text) && AD_TARGET.test(text);
+}
+
+/* ── 卷首元信息 ──────────────────────────────────────────────────────── */
+
+const AUTHOR_LINE = /^\s*作\s*者\s*[:：]\s*(.+?)\s*$/;
+const SUMMARY_LINE = /^\s*(?:内容简介|作品简介|书籍简介|小说简介|简\s*介|文案)\s*[:：]?\s*$/;
+
+/**
+ * 把整篇文本解析成「元信息 + 卷 + 章节」。
+ *
+ * 盗版站的 txt 通常长这样：广告块、书名、作者、内容简介，然后才是
+ * 第X部 / 第X章。以前这些全被当成正文塞进章节，抄起来满屏是水印。
+ *
+ * 两条原则：
+ *   1. 广告直接丢（见 isAdLine）；
+ *   2. 卷首区里**没认出来**的行不丢 —— 万一那不是元信息而是正文，
+ *      丢了就找不回来了。它们会组成一个「卷首」章节。
+ */
+export function parseNovel(text) {
+  const cleaned = String(text || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .filter(line => !isAdLine(line));
+
+  const meta = { title: '', author: '', summary: '' };
+  const intro = [];              // 卷首区里没认出来的行
+  let index = 0;
+  let inSummary = false;
+
+  for (; index < cleaned.length; index += 1) {
+    const line = cleaned[index];
+    const trimmed = line.trim();
+    if (isVolumeHeading(line) || isChapterHeading(line)) break;   // 正文开始了
+
+    if (inSummary) {
+      if (trimmed) meta.summary += (meta.summary ? '\n' : '') + trimmed;
+      continue;
+    }
+    const author = trimmed.match(AUTHOR_LINE);
+    if (author) { meta.author = author[1]; continue; }
+    if (SUMMARY_LINE.test(trimmed)) { inSummary = true; continue; }
+    if (!trimmed) continue;
+    /* 书名：卷首第一个短行，且不像"键：值"、不像正文句子。
+       带冒号的一律不当书名（"类型：玄幻"这种标签太多了）。 */
+    if (!meta.title && trimmed.length <= 40 && !/[:：]/.test(trimmed) && !/[。！？，]$/.test(trimmed)) {
+      meta.title = trimmed;
+      continue;
+    }
+    intro.push(line);
+  }
+
+  /* 卷首区里剩下的行：有正文就留着，组成一个「卷首」章节（绝不丢内容） */
+  const rest = intro.filter(line => line.trim());
+
+  const chapters = [];
+  let volume = '';
+  let current = null;
+  const flush = () => { if (current) chapters.push(current); current = null; };
+
+  if (rest.length) {
+    /* 后面还有章节 → 这些是卷首的零碎信息，单列一章；
+       整篇就这些（没有章节标题）→ 它就是正文本身，一个字都不能丢。 */
+    current = { title: index < cleaned.length ? '卷首' : '全文', volume: '', parts: rest };
+  }
+
+  for (; index < cleaned.length; index += 1) {
+    const line = cleaned[index];
+    if (isVolumeHeading(line)) {
+      flush();
+      volume = line.trim();
+      continue;
+    }
+    if (isChapterHeading(line)) {
+      flush();
+      current = { title: line.trim(), volume, parts: [] };
+      continue;
+    }
+    if (!current) {
+      if (!line.trim()) continue;
+      /* 卷标之后、第一章之前冒出来的内容：挂在这一卷名下，别丢 */
+      current = { title: volume || '前言', volume, parts: [] };
+    }
+    current.parts.push(line);
+  }
+  flush();
+
+  return { title: meta.title, author: meta.author, summary: meta.summary, chapters };
+}
+
 export function createBookId() {
   return `book-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -48,6 +174,7 @@ export function normalizeBook(book, id) {
     const written = chapter.written || '';
     return {
       title: chapter.title || '未命名章节',
+      volume: chapter.volume || '',
       /* 首行缩进：只改「还没开始抄」的章节。
          已经抄了一部分的章节一动内容，用户已写的字就会整体错位 —— 宁可留着。 */
       content: written ? raw : indentContent(raw),
@@ -59,6 +186,7 @@ export function normalizeBook(book, id) {
     id,
     title: book.title || '未命名书籍',
     author: book.author || '本地文本',
+    summary: String(book.summary || ''),
     chapters,
   };
 }
@@ -68,7 +196,12 @@ export function finalizeChapters(rawChapters) {
   const chapters = rawChapters
     .map(chapter => {
       const content = chapter.parts.join('\n').trim();
-      return { title: chapter.title, content: content || chapter.title, written: '' };
+      return {
+        title: chapter.title,
+        volume: chapter.volume || '',
+        content: content || chapter.title,
+        written: '',
+      };
     })
     .filter(chapter => chapter.title || chapter.content);
   if (!chapters.length) return [];
@@ -85,6 +218,7 @@ export function finalizeChapters(rawChapters) {
       if (!part) return;
       result.push({
         title: `${chapter.title} · ${String(partIndex).padStart(2, '0')}`,
+        volume: chapter.volume || '',
         content: part,
         written: '',
       });
@@ -109,34 +243,23 @@ export function finalizeChapters(rawChapters) {
 }
 
 /**
- * 读一个文本文件 → 章节数组。编码探测在这层完成：
+ * 读一个文本文件 → 元信息 + 章节数组。编码探测在这层完成：
  * 识别不准时（左侧下拉框）会走 encodingMode 指定的编码。
+ *
+ * 广告、书名、作者、简介、分卷的识别都在 parseNovel 里 —— 这里只负责
+ * 解码、定稿、补缩进。缩进要放在"内容定稿"之后，免得影响切分长度的判断。
  */
 export async function readFileAsChapters(file, encodingMode = 'auto') {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const encoding = MojiEncoding.detectEncoding(bytes, encodingMode);
   const text = MojiEncoding.decodeBytes(bytes, encoding);
 
-  const rawChapters = [];
-  let current = null;
-  text.split('\n').forEach(rawLine => {
-    const line = rawLine.replace(/^\uFEFF/, '').replace(/\r$/, '');
-    if (isChapterHeading(line)) {
-      if (current) rawChapters.push(current);
-      current = { title: line.trim(), parts: [] };
-    } else {
-      if (!current) current = { title: '全文', parts: [] };
-      current.parts.push(line);
-    }
-  });
-  if (current) rawChapters.push(current);
-
-  /* 先定稿再补缩进：缩进要在"内容已经定稿"之后做，免得影响切分长度的判断 */
-  const chapters = finalizeChapters(rawChapters).map(chapter => ({
+  const parsed = parseNovel(text);
+  const chapters = finalizeChapters(parsed.chapters).map(chapter => ({
     ...chapter,
     content: indentContent(chapter.content),
   }));
-  return { chapters, encoding };
+  return { ...parsed, chapters, encoding };
 }
 
 /* ── 逐字校对 ────────────────────────────────────────────────────────── */

@@ -37,6 +37,7 @@
 | 每天要够量 | 侧栏实时显示已抄字数、本次时长、平均速度、完成度、错误字数；左侧「今日小目标」盯着当天进度 |
 | 长期不断 | 统计页：连续天数、历史最长连续、最近 7 天柱状图、与上一周期对比 |
 | 按章拆书 | 章节目录支持逐章重置 / 删除；导入时自动识别「第 X 章」「序章」「Chapter 1」切分章节，超大章节自动再拆成能一次抄完的段落 |
+| 盗版站的脏文本 | 自动丢掉「更多精校小说尽在……」这类广告块与分隔线；认出正文里的书名、作者与「内容简介」并单独收好，不混进正文；「第 X 部 / 第 X 卷」识别成分卷，章节目录按卷分组显示 |
 | 各种 TXT | 自动识别 UTF-8 / UTF-16 / GB18030-GBK，识别不准可在左侧手动切换 |
 
 ## 快速开始
@@ -165,11 +166,12 @@ python -m unittest discover -s server/tests -t .
 # 前端纯计算层（Node）
 node verify/test-stats.js          # 统计 82 项
 node verify/test-encoding.js       # 编码探测 21 项
+node verify/test-text.js           # 导入解析：广告、卷首元信息、分卷与章节 32 项
 
 # 界面回归：CDP 驱动真实浏览器（附着方式见 verify/cdp-attach.js 顶部注释）
 npm run build                                      # 先生成 dist/
 python -m server --port 41777 --db ./test.sqlite3  # 用临时库起后端，别动真实数据
-node verify/cdp-attach.js <debugPort> verify/checks-vue-app.js   # 62 项，全部从用户视角看
+node verify/cdp-attach.js <debugPort> verify/checks-vue-app.js   # 68 项，全部从用户视角看
 ```
 
 写的时候踩过的坑都留了注释：为什么落库要每 5 秒一次、为什么退出时要留一份快照、

@@ -80,35 +80,88 @@
 
   /* ══ 2. 导入一本 txt ════════════════════════════════════════════════════ */
 
-  const BOOK_TITLE = `验证书${Date.now().toString(36).slice(-4)}`;
+  const stamp = Date.now().toString(36).slice(-4);
+  const BOOK_FILE = `导入文件-${stamp}`;      // 文件名：故意和正文里的书名不一样
+  const BOOK_NAME = `正文书名-${stamp}`;      // 正文第一行的书名：导入后应该用它
+  /* 一份"盗版站导出"的 txt：广告块 + 书名 + 作者 + 简介 + 两个分卷三章。
+     这些以前全会被当成正文塞进章节，抄起来满屏水印。 */
   const BOOK_TEXT = [
-    '第一章 起笔', '', '六月初一，长安城里已经热得像一只蒸笼。',
-    '李善德站在街角，手里攥着一纸公文，额头上全是汗。', '',
-    '第二章 落笔', '', '从长安到岭南，足有五千里。',
-    '纸页已经发黄，边角还留着前人的批注。', '',
-    '第三章 收笔', '', '快马离开驿站时，天刚蒙蒙亮。',
+    '==========================================================',
+    '更多精校小说尽在知轩藏书下载：https://zxcs.zip/',
+    '==========================================================',
+    BOOK_NAME,
+    '作者：验证作者',
+    '',
+    '内容简介：',
+    '　　这是一本用来跑回归检查的书。',
+    '',
+    '',
+    '第一部 上卷',
+    '',
+    '第一章 起笔',
+    '',
+    '六月初一，长安城里已经热得像一只蒸笼。',
+    '李善德站在街角，手里攥着一纸公文，额头上全是汗。',
+    '',
+    '第二章 落笔',
+    '',
+    '从长安到岭南，足有五千里。',
+    '纸页已经发黄，边角还留着前人的批注。',
+    '',
+    '',
+    '第二部 下卷',
+    '',
+    '第三章 收笔',
+    '',
+    '快马离开驿站时，天刚蒙蒙亮。',
   ].join('\n');
 
   async function importBook(doc, name, content) {
     const input = $$(doc, 'input[type=file]').find(el => (el.accept || '').includes('txt'));
     if (!input) return false;
+    const countBefore = $$(doc, '.book-card').length;
     const transfer = new DataTransfer();
     transfer.items.add(new File([content], `${name}.txt`, { type: 'text/plain' }));
     input.files = transfer.files;
     input.dispatchEvent(new doc.defaultView.Event('change', { bubbles: true }));
-    return Boolean(await waitFor(() => $$(doc, '.book-card').some(card => txt(card).includes(name)), 12000));
+    /* 等的是"书架上多了一本"，不是"卡片里出现文件名" ——
+       书名现在是从正文里认出来的，未必等于文件名。 */
+    return Boolean(await waitFor(() => $$(doc, '.book-card').length > countBefore, 12000));
   }
 
   const shelfBefore = $$(D, '.book-card').length;
-  const imported = await importBook(D, BOOK_TITLE, BOOK_TEXT);
+  const imported = await importBook(D, BOOK_FILE, BOOK_TEXT);
   record('导入 txt：识别章节、落库并出现在书架上',
     imported && $$(D, '.book-card').length === shelfBefore + 1,
     { imported, before: shelfBefore, after: $$(D, '.book-card').length });
   record('导入后自动打开这本书的工作台',
-    txt($(D, '.breadcrumbs')).includes(BOOK_TITLE), { breadcrumbs: txt($(D, '.breadcrumbs')) });
+    txt($(D, '.breadcrumbs')).includes(BOOK_NAME), { breadcrumbs: txt($(D, '.breadcrumbs')) });
 
   /* 测试书要走完落库，后面的"重新打开"才看得到它 */
   await wait(600);
+
+  /* ── 广告、分卷、简介：以前它们都会混进正文 ── */
+  record('书名取的是正文里的书名，不是文件名',
+    txt($(D, '.book-title')) === BOOK_NAME, { shelf: txt($(D, '.book-title')), file: BOOK_FILE });
+  record('作者也来自正文（不再写死"本地文本"）',
+    /验证作者/.test(txt($(D, '.book-card'))), { card: txt($(D, '.book-card')) });
+  record('工作台正文里没有广告与水印',
+    !txt($(D, '#sourceTrack')).includes('知轩藏书') && !$(D, '#sourceTrack').innerHTML.includes('zxcs.zip'), {});
+
+  byText(D, '.main-nav .nav-item', '章节目录').click();
+  await frame(D);
+  await wait(350);
+  record('章节数正确（两个卷标不算章节）',
+    $$(D, '.chapter-row').length === 3, { rows: $$(D, '.chapter-row').length });
+  record('分卷被识别成分组行，而不是混进某一章',
+    $$(D, '.volume-row').length === 2,
+    { volumes: $$(D, '.volume-row').map(el => txt(el)) });
+  record('内容简介被单独收起来（不在正文里）',
+    Boolean($(D, '.summary-card')) && txt($(D, '.summary-card')).includes('回归检查'),
+    { summary: txt($(D, '.summary-card')).slice(0, 30) });
+  byText(D, '.main-nav .nav-item', '抄写工作台').click();
+  await frame(D);
+  await wait(350);
 
   /* ══ 3. 抄写区：缩进、对齐、校对 ════════════════════════════════════════ */
 
@@ -439,7 +492,7 @@
 
   /* 回到第一本验证书上收笔：Ctrl+Enter 完成本章（用户会用的那条路）。
      前面导入的长书会把"当前书"切走，所以先把侧栏里的书卡片点回来。 */
-  byText(D, '.book-card', BOOK_TITLE).click();
+  byText(D, '.book-card', BOOK_NAME).click();
   await frame(D);
   await wait(800);
   const wrapArea = qid(D, 'writingArea');
@@ -454,7 +507,7 @@
       toast: txt($(D, '.toast')), meta: txt($(D, '.heading-meta')) });
 
   const bootstrapBefore = await (await fetch('/api/bootstrap')).json();
-  const bookRecord = bootstrapBefore.books.find(item => (item.book.title || '').startsWith(BOOK_TITLE));
+  const bookRecord = bootstrapBefore.books.find(item => (item.book.title || '').startsWith(BOOK_NAME));
   const chapterIndex = 0;
   const chapterProgressBefore = bootstrapBefore.progress
     .find(item => item.bookId === (bookRecord && bookRecord.id) && item.index === chapterIndex);
@@ -470,7 +523,7 @@
     at: Date.now(),
     date: new Date().toLocaleDateString('sv'),
     bookId: bookRecord ? bookRecord.id : '',
-    bookTitle: BOOK_TITLE,
+    bookTitle: BOOK_NAME,
     chapterIndex,
     chapterTitle: pendingChapterTitle,
     words: 321,
@@ -566,8 +619,8 @@
      防重入要是失效了（settleTask 没复用），同一段时长就会被加四遍。 */
   if (freshDoc) {
     const shelf = $$(freshDoc, '.book-card');
-    const target = shelf.find(card => txt(card).includes(BOOK_TITLE));
-    const other = shelf.find(card => !txt(card).includes(BOOK_TITLE));
+    const target = shelf.find(card => txt(card).includes(BOOK_NAME));
+    const other = shelf.find(card => !txt(card).includes(BOOK_NAME));
     if (target && other) {
       /* 先把上一段会话收掉（它还带着前一条检查那几秒），下面量到的增量才干净 ——
          顺带也把当前章节带回第 1 章。 */
@@ -577,7 +630,7 @@
       await wait(1200);
 
       const firstProbe = await (await fetch('/api/bootstrap')).json();
-      const frameBook = firstProbe.books.find(item => (item.book.title || '').startsWith(BOOK_TITLE));
+      const frameBook = firstProbe.books.find(item => (item.book.title || '').startsWith(BOOK_NAME));
       const frameBookId = frameBook ? frameBook.id : '';
       /* 按整本书求和，不盯某一章：这一章是第几章取决于当前停在哪，
          但它一定落在这本书的某一条进度上。 */

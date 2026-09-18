@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import tempfile
 import unittest
 
@@ -23,6 +24,37 @@ class StoreTest(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    # ── 老库升级 ──────────────────────────────────────────────────────
+
+    def test_opens_library_written_before_summary_and_volume(self):
+        """老库（没有 summary / volume 两列）打开后应该被补上，而不是报错。
+
+        版本升级时最容易在这里翻车：CREATE TABLE IF NOT EXISTS 对已存在的表
+        一个字都不会改，不补列的话，老用户的库里这两项读出来永远是空的。
+        """
+        legacy = os.path.join(self.tmp.name, 'legacy.sqlite3')
+        conn = sqlite3.connect(legacy)
+        conn.executescript(
+            'CREATE TABLE books (id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT "", '
+            'author TEXT NOT NULL DEFAULT "", updated_at INTEGER NOT NULL DEFAULT 0);'
+            'CREATE TABLE chapters (book_id TEXT NOT NULL, idx INTEGER NOT NULL, '
+            'title TEXT NOT NULL DEFAULT "", content TEXT NOT NULL DEFAULT "", '
+            'PRIMARY KEY (book_id, idx));'
+        )
+        conn.execute('INSERT INTO books(id, title, author, updated_at) VALUES(?, ?, ?, ?)',
+                     ('b1', '旧书', '旧作者', 1))
+        conn.execute('INSERT INTO chapters(book_id, idx, title, content) VALUES(?, ?, ?, ?)',
+                     ('b1', 0, '第一章', '旧正文'))
+        conn.commit()
+        conn.close()
+
+        store = MojiStore(legacy)                 # 打开即补列
+        book = store.bootstrap()['books'][0]['book']
+        self.assertEqual(book['title'], '旧书')
+        self.assertEqual(book['summary'], '')     # 补出来的列给空值，不是报错
+        self.assertEqual(book['chapters'][0]['content'], '旧正文')
+        self.assertEqual(book['chapters'][0]['volume'], '')
 
     # ── 书籍与进度 ────────────────────────────────────────────────────
 
