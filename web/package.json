@@ -1,4 +1,0 @@
-{
-  "//": "web/ 里是免构建的那套前端（UMD 模块），会被 verify/test-*.js 用 require 加载。这个文件把它划回 CommonJS，避免被项目根的 ESM 设置影响。",
-  "type": "commonjs"
-}

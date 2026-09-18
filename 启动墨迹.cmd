@@ -1,6 +1,6 @@
 @echo off
 rem ---------------------------------------------------------------------------
-rem Double-click launcher for MoJi (Windows).
+rem Double-click launcher for MoJi (Windows) - browser mode.
 rem
 rem It starts the local server in the background and opens the browser.
 rem pythonw.exe is used on purpose: it has no console window, so the server
@@ -14,6 +14,18 @@ rem code page, and non-ASCII text here is a classic source of garbled output.
 rem ---------------------------------------------------------------------------
 
 cd /d "%~dp0"
+
+if not exist "dist\index.html" (
+    echo The frontend has not been built yet.
+    echo.
+    echo Run these two commands once in this folder:
+    echo     npm install
+    echo     npm run build
+    echo.
+    echo ^(For the desktop app instead, run: scripts\build-desktop.cmd^)
+    pause
+    exit /b 1
+)
 
 where pythonw >nul 2>&1
 if %errorlevel%==0 (
@@ -30,7 +42,7 @@ if %errorlevel%==0 (
 echo.
 echo Python not found.
 echo.
-echo MoJi is built on the Python standard library only.
+echo MoJi's browser mode is built on the Python standard library only.
 echo Install Python 3.10 or newer, then run this file again:
 echo   https://www.python.org/downloads/
 echo.

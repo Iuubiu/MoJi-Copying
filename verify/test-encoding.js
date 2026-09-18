@@ -10,7 +10,10 @@ const path = require('path');
 
 const HERE = __dirname;
 const FIXTURES = path.join(HERE, 'fixtures');
-const { detectEncoding, decodeBytes, encodingLabel, utf8SafePrefix } = require(path.join(HERE, '..', 'web', 'encoding.js'));
+/* 同 test-stats.js：UMD 加载后挂在 globalThis 上，require 的返回值在
+   ESM 作用域下拿到的是 namespace，不能用。 */
+require(path.join(HERE, '..', 'src', 'core', 'encoding.js'));
+const { detectEncoding, decodeBytes, encodingLabel, utf8SafePrefix } = globalThis.MojiEncoding;
 
 const checks = [];
 const record = (name, ok, detail) => { checks.push({ name, ok, detail }); };

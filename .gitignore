@@ -9,24 +9,18 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
-# Node / 前端构建
+# Node / 前端构建产物（dist/ 由 npm run build 生成，不入库）
 node_modules/
 dist/
 
-# Rust / Tauri 构建
+# Rust / Tauri 构建产物
 src-tauri/target/
 src-tauri/gen/
-
-# 构建产物（发布包由 desktop/make_release.py 生成，不入库）
-outputs/
-desktop/build/
-desktop/dist/
 
 # 本地数据文件（数据库只属于用户本机，绝不进仓库）
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
-desktop/selftest*.json
 
 # 回归检查的临时输出
 verify/_out-*.json

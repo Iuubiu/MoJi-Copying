@@ -1,10 +1,15 @@
-"""生成应用图标：桌面版用的 MoJi.ico + 网页端用的 icon-192.png / icon-512.png。
+"""生成应用图标：桌面版（Tauri）与浏览器版（PWA）共用同一张脸。
 
 深墨色圆角方块 + 纸色「墨」字，与应用内配色一致（--ink #262726 / --paper #fbfaf7 / --rust #c3483e）。
-PNG 是给"安装为应用"（PWA）准备的：浏览器要看到 manifest 里的图标才肯把页面装成应用。
 只依赖 Pillow，属于构建期脚本，运行时不加载。
 
-    python gen_icon.py
+    python scripts/gen_icon.py
+
+产出：
+    src-tauri/icons/icon.ico    桌面版打包用（多尺寸）
+    src-tauri/icons/icon.png    桌面版打包用（Tauri 要求有 PNG）
+    public/icon-192.png         浏览器"安装为应用"的图标（192 是安装门槛）
+    public/icon-512.png         同上，高分屏
 """
 
 from __future__ import annotations
@@ -14,8 +19,9 @@ import os
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUTPUT = os.path.join(HERE, "MoJi.ico")
-WEB_DIR = os.path.join(os.path.dirname(HERE), "web")
+ROOT = os.path.dirname(HERE)
+ICON_DIR = os.path.join(ROOT, "src-tauri", "icons")
+PUBLIC_DIR = os.path.join(ROOT, "public")
 
 INK = (38, 39, 38, 255)          # --ink
 PAPER = (251, 250, 247, 255)     # --paper
@@ -73,16 +79,23 @@ def draw_icon(size: int = 1024) -> Image.Image:
 
 
 def main() -> int:
+    os.makedirs(ICON_DIR, exist_ok=True)
+    os.makedirs(PUBLIC_DIR, exist_ok=True)
     base = draw_icon(1024)
-    base.save(OUTPUT, format="ICO", sizes=[(s, s) for s in ICO_SIZES])
-    print(f"已生成 {OUTPUT}（{os.path.getsize(OUTPUT)} 字节，尺寸 {', '.join(str(s) for s in ICO_SIZES)}）")
 
-    # 网页端也要同一张脸：浏览器"安装为应用"时用 manifest 里的 PNG 图标，
-    # 有图标才给装（Edge/Chrome 的安装入口就靠它）。
+    ico_path = os.path.join(ICON_DIR, "icon.ico")
+    base.save(ico_path, format="ICO", sizes=[(s, s) for s in ICO_SIZES])
+    print(f"已生成 {ico_path}（{os.path.getsize(ico_path)} 字节，尺寸 {', '.join(str(s) for s in ICO_SIZES)}）")
+
+    # Tauri 打包要求有一张 PNG 图标；浏览器"安装为应用"要 manifest 里的 192 / 512。
     for size in PNG_SIZES:
-        path = os.path.join(WEB_DIR, f"icon-{size}.png")
-        base.resize((size, size), Image.LANCZOS).save(path, format="PNG")
-        print(f"已生成 {path}（{os.path.getsize(path)} 字节）")
+        image = base.resize((size, size), Image.LANCZOS)
+        targets = [os.path.join(PUBLIC_DIR, f"icon-{size}.png")]
+        if size == 512:
+            targets.append(os.path.join(ICON_DIR, "icon.png"))
+        for path in targets:
+            image.save(path, format="PNG")
+            print(f"已生成 {path}（{os.path.getsize(path)} 字节）")
     return 0
 
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import threading
 import urllib.request
@@ -40,7 +41,7 @@ def main(argv=None) -> int:
     parser.add_argument('--port', type=int, default=PORT_CANDIDATES[0],
                         help=f'监听端口（默认 {PORT_CANDIDATES[0]}；被占用会自动顺延）')
     parser.add_argument('--db', default=None, help='SQLite 文件路径（默认在用户数据目录）')
-    parser.add_argument('--web', default=None, help='前端资源目录（默认项目里的 web/）')
+    parser.add_argument('--web', default=None, help='前端资源目录（默认项目里的 dist/，由 npm run build 生成）')
     parser.add_argument('--open', dest='open_browser', action='store_true', help='启动后打开系统浏览器')
     parser.add_argument('--force', action='store_true',
                         help='端口上已经有墨迹在跑时，也强行再起一个实例')
@@ -57,8 +58,16 @@ def main(argv=None) -> int:
                 webbrowser.open(url)
             return 0
 
+    root = args.web or paths.web_dir()
+    if not os.path.isfile(os.path.join(root, 'index.html')):
+        # 前端是 Vite 构建出来的：没构建过就会是这样。说清楚该跑什么，
+        # 比让人对着一个 404 的首页猜要强。
+        print(f'提示：{root} 里没有 index.html —— 前端还没构建。', file=sys.stderr)
+        print('      先跑一次 npm install && npm run build（生成 dist/），'
+              '或用 --web 指定别的目录。', file=sys.stderr)
+
     server = AppServer(
-        root=args.web or paths.web_dir(),
+        root=root,
         db_path=args.db or paths.default_db_path(),
         preferred_port=args.port,
     )

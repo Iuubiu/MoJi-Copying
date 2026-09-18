@@ -4,10 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f3f0ea" />
+    <!-- 后端地址：留空表示与页面同源（桌面版走 IPC，浏览器模式走 python -m server）。
+         前后端分开部署时在这里写后端地址，例如 http://127.0.0.1:8000 -->
+    <meta name="moji-api" content="" />
     <title>墨迹 · 小说抄写工作台</title>
+    <!-- 装成应用：浏览器模式下地址栏会出现「安装」，装上就是独立窗口 -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="icon-192.png" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
   </head>
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
+    <script>
+      /* 注册 Service Worker：只为了满足浏览器"安装为应用"的条件。
+         它不缓存任何东西（见 public/sw.js），所以不会让页面停在旧版本上。 */
+      if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      }
+    </script>
   </body>
 </html>

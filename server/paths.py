@@ -1,9 +1,8 @@
-"""墨迹 · 路径约定（数据放哪、前端放哪）。集中在一处，桌面外壳与独立后端共用。"""
+"""墨迹 · 路径约定（数据放哪、前端放哪）。集中在一处，服务端与桌面版共用。"""
 
 from __future__ import annotations
 
 import os
-import sys
 
 APP_ID = 'MoJi'
 
@@ -40,18 +39,11 @@ def project_root() -> str:
 
 
 def web_dir() -> str:
-    """前端资源目录。
+    """前端资源目录：Vite 的构建产物 `dist/`。
 
-    优先用 Vite 的构建产物 `dist/` —— 前后端分离后前端只有这一份，
-    桌面版（Tauri）与浏览器模式（这个 Python 后端）读的是同一套页面。
-    还没构建过就回退到 `web/`（无需构建的那份），保证 `python -m server`
-    在没跑过 npm 的机器上也能开起来。
+    前端只有这一份 —— 桌面版（Tauri）内嵌的是它，浏览器模式（这个 Python 后端）
+    托管的也是它，所以两种打开方式看到的界面完全一致。
+    还没构建过（没跑过 npm run build）时这里没有 index.html，
+    __main__ 会明确提示而不是让人对着 404 发懵。
     """
-    if getattr(sys, 'frozen', False):
-        base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(sys.executable)))
-        return os.path.join(base, 'web')
-    root = project_root()
-    built = os.path.join(root, 'dist')
-    if os.path.isfile(os.path.join(built, 'index.html')):
-        return built
-    return os.path.join(root, 'web')
+    return os.path.join(project_root(), 'dist')

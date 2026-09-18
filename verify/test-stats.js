@@ -6,7 +6,11 @@
    用法: node verify/test-stats.js
 */
 const path = require('path');
-const S = require(path.join(__dirname, '..', 'web', 'stats.js'));
+/* stats.js 是 UMD：加载它就会把 API 挂到 globalThis.MojiStats。
+   不从 require 的返回值取，是因为 src/ 在 ESM 作用域下（项目根的 package.json
+   是 type:module），require 拿到的是 module namespace 而不是那个对象。 */
+require(path.join(__dirname, '..', 'src', 'core', 'stats.js'));
+const S = globalThis.MojiStats;
 
 const checks = [];
 const record = (name, ok, detail) => checks.push({ name, ok, detail });

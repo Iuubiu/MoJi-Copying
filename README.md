@@ -88,31 +88,33 @@ src/                 前端：Vue 3 + Vite
   core/              纯计算层：统计、编码探测、文本与校对（Node 侧有 82 项回归测试）
   composables/       全局状态：书架、会话计时与落库、统计合成
   components/        视图：工作台 / 章节目录 / 统计 / 设置
+public/              原样进 dist 的静态资源（PWA 的 manifest、图标、service worker）
 src-tauri/           桌面版：Tauri 2 + Rust
   src/store.rs       SQLite 持久层：六张表 + daily 物化视图
   src/commands.rs    IPC 命令（与 HTTP 端点一一对应）
 server/              浏览器模式的后端：Python 标准库 + SQLite，零第三方依赖
-web/                 免构建的备用前端（没跑过 npm 时 Python 后端用它兜底）
-desktop/             PyInstaller + pywebview 的另一种桌面打包方式
-verify/              端到端回归（CDP 驱动真实浏览器）
+scripts/             构建辅助（打安装包、生成图标）
+verify/              回归检查（Node 单测 + CDP 驱动真实浏览器）
+docs/                使用说明
 ```
 
-两条数据通道（IPC / HTTP）的端点一一对应，所以同一份前端既能在桌面里跑，
-也能在浏览器里跑；加功能时两端各加一个端点，再往 `src/api/index.js` 加一个方法。
+前端只有 `dist/` 一份（`npm run build` 的产物）：桌面版把它嵌进二进制，
+浏览器模式由 Python 后端托管 —— 两种打开方式看到的是同一个界面。
+
+两条数据通道（IPC / HTTP）的端点一一对应，加功能时两端各加一个端点，
+再往 `src/api/index.js` 加一个方法。
 
 后端只负责存、不算：统计、校对、完成度都放在前端的纯函数里（有 82 项 Node 测试
 盯着），`daily` 由后端在写入会话的同一个事务里从 `sessions` 重算 ——
 统计口径只有一个来源。
 
 桌面版不开任何端口；浏览器模式下 Python 服务只监听 `127.0.0.1`，
-也只对本机来源回 CORS 头。想把前端单独部署（前端 5173、后端 8000），
-在页面里写上后端地址即可：
+也只对本机来源（`127.0.0.1` / `localhost`）回 CORS 头。
+想把前端单独部署（前端 5173、后端 8000），在页面里写上后端地址即可：
 
 ```html
 <meta name="moji-api" content="http://127.0.0.1:8000" />
 ```
-
-后端只接受本机来源（`127.0.0.1` / `localhost`），也只对本机来源回 CORS 头。
 
 ## 数据存在哪
 
@@ -142,18 +144,17 @@ Linux / macOS ~/.local/share/moji/moji.sqlite3
 ## 测试
 
 ```bash
-# 后端：持久层 + HTTP 层（36 项）
+# 后端：持久层 + HTTP 层（37 项）
 python -m unittest discover -s server/tests -t .
 
-# 前端纯计算层
+# 前端纯计算层（Node）
 node verify/test-stats.js          # 统计 82 项
 node verify/test-encoding.js       # 编码探测 21 项
 
-# 端到端（CDP 驱动真实浏览器；先起后端）
-python -m server --port 41777
-node verify/cdp-attach.js <debugPort> verify/checks-features.js            # 界面与数据层 64 项
-node verify/cdp-attach.js <debugPort> verify/checks-session-persistence.js # 会话落库与统计口径 9 项
-node verify/cdp-attach.js <debugPort> verify/checks-migration.js           # 数据搬迁 10 项
+# 界面回归：CDP 驱动真实浏览器（附着方式见 verify/cdp-attach.js 顶部注释）
+npm run build                                      # 先生成 dist/
+python -m server --port 41777 --db ./test.sqlite3  # 用临时库起后端，别动真实数据
+node verify/cdp-attach.js <debugPort> verify/checks-vue-app.js   # 16 项
 ```
 
 写的时候踩过的坑都留了注释：为什么落库要每 5 秒一次、为什么退出时要留一份快照、
