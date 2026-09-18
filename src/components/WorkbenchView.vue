@@ -13,7 +13,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import {
   beginSession, chapterMetrics, currentBook, currentChapter, flushSession, getWritten,
-  hasWrittenText, practice, saveSetting, scheduleIdleFlush, state, writeProgress,
+  hasWrittenText, practice, saveSetting, scheduleIdleFlush, showToast, state, writeProgress,
 } from '../composables/useStore.js';
 import { charsMatch, differenceList, getSourceIndent, sentenceAt } from '../core/text.js';
 import { MojiStats } from '../core/index.js';
@@ -84,9 +84,10 @@ function renderTypedDisplay() {
     const ok = charsMatch(source[index], typed, lenient);
     parts.push(`<span class="${ok ? 'ok' : 'bad'}">${escapeHtml(typed)}</span>`);
   }
-  /* 剩下的原文用淡色铺在下面：一是能看出还有多少，二是 textarea 透明时
-     光标位置的高度不会塌掉。 */
-  const rest = source.slice(upto);
+  /* 剩下的原文只在单栏模式下铺成灰字：那儿没有原文栏，它就是"底稿"，
+     抄过去变黑、抄错变红。双栏模式左边就是原文，右边再铺一层灰字，
+     只会让人以为已经替你输入好了。 */
+  const rest = state.settings.columnMode === 'single' ? source.slice(upto) : '';
   if (rest) parts.push(`<span class="rest">${escapeHtml(rest)}</span>`);
   element.innerHTML = parts.join('');
 
@@ -117,9 +118,9 @@ function lineHeight() {
 function syncPaneLayout() {
   const paper = writingPaper.value;
   const area = writingArea.value;
-  const track = sourceTrack.value;
-  if (!paper || !area || !track) return;
-  const sourceHeight = track.offsetHeight;
+  if (!paper || !area) return;
+  /* 单栏模式没有原文轨道，纸面高度就按抄写内容来（底部同样留一行） */
+  const sourceHeight = sourceTrack.value ? sourceTrack.value.offsetHeight : 0;
   area.style.height = 'auto';
   const writingHeight = area.scrollHeight;
   const height = Math.max(sourceHeight, writingHeight) + lineHeight();
@@ -259,6 +260,20 @@ async function togglePunct() {
     : '标点按严格比对');
 }
 
+/**
+ * 抄写区形态：双栏（左原文右抄写）/ 单栏（只留抄写栏，原文铺灰字当底稿）。
+ * 只影响这一屏怎么摆，不碰任何数据。
+ */
+async function toggleColumnMode() {
+  await saveSetting('columnMode', state.settings.columnMode === 'single' ? 'split' : 'single');
+  await nextTick();
+  renderTypedDisplay();
+  syncPaneLayout();
+  showToast(state.settings.columnMode === 'single'
+    ? '单栏模式：原文铺成灰字，抄过去变黑，抄错变红'
+    : '双栏模式：左原文、右抄写');
+}
+
 /* ── 生命周期 ─────────────────────────────────────────────────────────── */
 
 function refreshAll() {
@@ -354,6 +369,9 @@ defineExpose({ focusWriting, refreshAll });
               <button class="toolbar-button" type="button" @click="state.fontSize = Math.min(24, state.fontSize + 1)">A＋</button>
             </div>
             <div class="toolbar-divider"></div>
+            <button class="toolbar-button" :class="{ active: state.settings.columnMode === 'single' }" type="button"
+                    title="双栏：左原文右抄写；单栏：原文铺成灰字当底稿"
+                    @click="toggleColumnMode">{{ state.settings.columnMode === 'single' ? '单栏' : '双栏' }}</button>
             <button class="toolbar-button" :class="{ active: state.settings.punctLenient }" type="button"
                     @click="togglePunct">± 标点宽松</button>
             <button class="toolbar-button" :class="{ active: proofOpen }" type="button"
@@ -388,8 +406,8 @@ defineExpose({ focusWriting, refreshAll });
             </div>
           </div>
 
-          <div class="copy-body">
-            <div class="source-column">
+          <div class="copy-body" :class="{ 'single-column': state.settings.columnMode === 'single' }">
+            <div v-if="state.settings.columnMode !== 'single'" class="source-column">
               <div class="column-label"><span>原文</span></div>
               <div id="sourceText" ref="sourcePane" class="source-text" :style="{ fontSize: state.fontSize + 'px' }">
                 <pre id="sourceTrack" ref="sourceTrack" class="source-track" v-html="sourceHtml"></pre>

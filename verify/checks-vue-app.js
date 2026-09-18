@@ -190,12 +190,10 @@
     Boolean(txt($(D, '#pageTitle'))) && !source.startsWith(txt($(D, '#pageTitle'))),
     { title: txt($(D, '#pageTitle')), sourceHead: source.slice(0, 16) });
 
-  /* 校对层里"还没写到的原文"必须是淡色：它和"已经写进去的字"同为深色时，
-     整段原文看起来就像已经被自动填进抄写栏了（这条以前真的漏了）。 */
-  const restSpan = $(D, '#typingDisplay span.rest');
-  const restColor = restSpan ? getComputedStyle(restSpan).color : '';
-  record('还没写到的原文是淡色（不会被看成"已经输入好了"）',
-    Boolean(restSpan) && restColor !== 'rgb(63, 66, 62)', { rest: restColor });
+  /* 双栏模式：抄写栏里只该有你写的字，不铺"还没写到的原文" ——
+     左边就是原文，右边再铺一层灰字只会让人以为已经替你输好了。 */
+  record('双栏模式：抄写栏不铺灰字（原文在左边看）',
+    !$(D, '#typingDisplay span.rest'), {});
 
   record('新章节自动补上原文首行缩进（两栏第一行对得齐）',
     area.value.startsWith('\u3000\u3000'), { typed: JSON.stringify(area.value.slice(0, 4)) });
@@ -252,15 +250,47 @@
   await frame(D);
   await wait(150);
 
+  const okSpan = $$(D, '#typingDisplay span.ok')[0];
+  const badSpan = $$(D, '#typingDisplay span.bad')[0];
   record('逐字校对：正确字与错字分别标出',
     $$(D, '#typingDisplay span.ok').length >= 8 && $$(D, '#typingDisplay span.bad').length >= 1,
     { ok: $$(D, '#typingDisplay span.ok').length, bad: $$(D, '#typingDisplay span.bad').length });
+  /* 颜色必须真的落到屏幕上。类名与 CSS 选择器曾经对不上
+     （渲染用 ok/bad，样式写的是 correct/incorrect），红字静悄悄地失效了很久 ——
+     只数 span 的个数是抓不住这种错的。 */
+  record('抄对的字是深色、抄错的字是红色',
+    Boolean(okSpan && badSpan)
+    && getComputedStyle(okSpan).color === 'rgb(63, 66, 62)'
+    && getComputedStyle(badSpan).color === 'rgb(195, 72, 62)',
+    { ok: okSpan ? getComputedStyle(okSpan).color : null,
+      bad: badSpan ? getComputedStyle(badSpan).color : null });
   record('侧栏「已抄写」随输入更新', /9\s*字/.test(metricAt(0)), { text: metricAt(0) });
   record('侧栏「错误字数」标出那一个错字', /1\s*字/.test(metricAt(3)), { text: metricAt(3) });
   record('第一次输入就建立了会话（时长开始走）',
     /^00:[0-5]\d$/.test(metricAt(1)), { text: metricAt(1), mode: txt($(D, '.copy-mode')) });
   record('时长样本不足 5 秒时不显示速度（杜绝刚开写就冒出的天文数字）',
     /—/.test(metricAt(2)), { text: metricAt(2) });
+
+  /* ── 单栏模式：原文栏收起来，原文铺成灰字底稿，抄过去变黑、抄错变红 ── */
+  const columnsButton = byText(D, '.toolbar-button', '双栏');
+  if (columnsButton) {
+    columnsButton.click();
+    await wait(500);
+    const restSpan = $(D, '#typingDisplay span.rest');
+    record('切到单栏：原文栏收起、原文铺成灰字底稿',
+      !$(D, '.source-column') && Boolean(restSpan), {});
+    record('单栏的底稿是淡灰色（不是正文色）',
+      Boolean(restSpan) && getComputedStyle(restSpan).color === 'rgb(210, 209, 202)',
+      { rest: restSpan ? getComputedStyle(restSpan).color : null });
+    record('单栏切换会给出提示（不是默默生效）',
+      /单栏/.test(txt($(D, '.toast'))), { toast: txt($(D, '.toast')) });
+
+    const backButton = byText(D, '.toolbar-button', '单栏');
+    if (backButton) backButton.click();
+    await wait(500);
+    record('切回双栏：原文栏回来、灰字收起',
+      Boolean($(D, '.source-column')) && !$(D, '#typingDisplay span.rest'), {});
+  }
 
   /* ══ 4. 校对清单 ════════════════════════════════════════════════════════ */
 
@@ -320,6 +350,10 @@
     await wait(260);
     record('宽松模式：全角/半角标点不再算错（且设置在切换后立刻生效）',
       /^0\s*字$/.test(metricAt(3)), { text: metricAt(3) });
+    /* 切换要有可见反馈。这一条守的是 showToast 被漏导入那类回归 ——
+       Vue 会吞掉事件处理里抛的错，界面上只表现为"点了没反应"。 */
+    record('切标点宽松会给出提示（不是默默生效）',
+      /标点按/.test(txt($(D, '.toast'))), { toast: txt($(D, '.toast')) });
 
     /* 宽松不能把真错字也放过 */
     area.value = `${toFullStop}错`;

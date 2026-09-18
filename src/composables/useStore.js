@@ -42,7 +42,13 @@ export const backend = reactive({
 
 const snapshot = reactive({ books: [], progress: [], sessions: [], daily: [], settings: [] });
 
-export const DEFAULT_SETTINGS = { nickname: '', dailyGoal: 800, punctLenient: true };
+export const DEFAULT_SETTINGS = {
+  nickname: '',
+  dailyGoal: 800,
+  punctLenient: true,
+  /* 抄写区形态：split = 左原文右抄写；single = 只留抄写栏，原文铺成灰底稿 */
+  columnMode: 'split',
+};
 
 /* ── 界面状态 ─────────────────────────────────────────────────────────── */
 
