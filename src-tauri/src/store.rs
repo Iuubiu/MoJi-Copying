@@ -127,13 +127,20 @@ fn flag(value: Option<&Value>) -> i64 {
 
 /* ── 数据目录 ─────────────────────────────────────────────────────────── */
 
-/// 数据库默认位置：`%LOCALAPPDATA%\MoJi\moji.sqlite3`（其它平台走 ~/.local/share/moji）。
+/// 数据库默认位置。
+///
+/// 便携版优先：可执行文件旁边有 `data` 目录就把数据写进去 ——
+/// 整个文件夹拷到 U 盘或另一台机器，抄写进度跟着走。
+/// 否则用 `%LOCALAPPDATA%\MoJi\moji.sqlite3`（其它平台 ~/.local/share/moji），
 /// 与 Python 版同一个位置 —— 两种启动方式共用一份数据。
 pub fn default_db_path() -> PathBuf {
     if let Ok(dir) = std::env::var("MOJI_DATA_DIR") {
         if !dir.is_empty() {
             return PathBuf::from(dir).join("moji.sqlite3");
         }
+    }
+    if let Some(dir) = portable_dir() {
+        return dir.join("moji.sqlite3");
     }
     if cfg!(windows) {
         let base = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| {
@@ -146,6 +153,20 @@ pub fn default_db_path() -> PathBuf {
             format!("{home}/.local/share")
         });
         PathBuf::from(base).join("moji").join("moji.sqlite3")
+    }
+}
+
+/// 便携模式的判定：可执行文件旁边有没有 `data` 目录。
+///
+/// 用"目录在不在"而不是"能不能写"来判断 —— 同一个 exe 的行为不该随
+/// 它被放在哪个盘符、哪台机器上而变。目录由便携版压缩包自带。
+fn portable_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?.join("data");
+    if dir.is_dir() {
+        Some(dir)
+    } else {
+        None
     }
 }
 

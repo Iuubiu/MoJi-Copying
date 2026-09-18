@@ -62,6 +62,17 @@ rustup default stable-msvc
 前端是 Vue 3 + Vite，数据层是 Rust + SQLite —— 编译产物约 4MB，
 不依赖 Python，也不开任何端口。
 
+**便携版**（免安装，数据跟着文件夹走）：
+
+```bash
+scripts\build-portable.cmd      # 产出 dist-portable\MoJi-portable.zip
+```
+
+解压到哪儿都行（U 盘也可以），双击 `MoJi.exe` 就能用：不写注册表，
+数据写在同目录的 `data\moji.sqlite3` 里，整个文件夹拷到另一台电脑接着抄。
+判定很简单 —— **exe 旁边有 `data` 目录就是便携模式**，没有就用下面那个系统目录。
+exe 静态链接了 C 运行时，干净系统上只差一个系统自带的 WebView2。
+
 **浏览器模式**（改前端不用等编译，适合边写边调）：
 
 ```bash
@@ -93,7 +104,8 @@ src-tauri/           桌面版：Tauri 2 + Rust
   src/store.rs       SQLite 持久层：六张表 + daily 物化视图
   src/commands.rs    IPC 命令（与 HTTP 端点一一对应）
 server/              浏览器模式的后端：Python 标准库 + SQLite，零第三方依赖
-scripts/             构建辅助（打安装包、生成图标）
+scripts/             构建辅助（打安装包 / 便携版、生成图标）
+.cargo/              便携版的编译选项：静态链接 C 运行时
 verify/              回归检查（Node 单测 + CDP 驱动真实浏览器）
 docs/                使用说明
 ```
@@ -123,8 +135,11 @@ Windows       %LOCALAPPDATA%\MoJi\moji.sqlite3
 Linux / macOS ~/.local/share/moji/moji.sqlite3
 ```
 
-一个 SQLite 文件就是全部数据，桌面版与命令行版共用这一份；`MOJI_DATA_DIR` 可以整体挪走。
-备份就是复制这个文件，或者用设置里的「导出备份」。
+一个 SQLite 文件就是全部数据，安装版桌面版与命令行版共用这一份；
+`MOJI_DATA_DIR` 可以整体挪走。备份就是复制这个文件，或者用设置里的「导出备份」。
+
+便携版是例外，也是它的意义所在：数据在 exe 旁边的 `data\moji.sqlite3`，
+不碰系统目录 —— 换台机器，拷过去就能接着写。
 
 ## API
 

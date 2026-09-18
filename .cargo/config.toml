@@ -1,0 +1,11 @@
+# 便携版要的是"拷到任何一台 Windows 上双击就开"。
+# 默认的 msvc 目标动态链接 C 运行时（VCRUNTIME140.dll 等），干净系统上可能没有；
+# 静态链接进去，exe 就只依赖系统自带的 WebView2 了。
+#
+# 放在仓库根：cargo 从当前目录往上找 .cargo/config.toml，
+# 无论它是在根目录还是 src-tauri/ 里启动，都能读到这一份。
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

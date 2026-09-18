@@ -13,6 +13,9 @@ __pycache__/
 node_modules/
 dist/
 
+# 便携版打包目录（由 scripts/build-portable.cmd 生成，不入库）
+dist-portable/
+
 # Rust / Tauri 构建产物
 src-tauri/target/
 src-tauri/gen/
