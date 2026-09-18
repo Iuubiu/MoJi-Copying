@@ -77,26 +77,37 @@ function renderTypedDisplay() {
   const written = area.value;
   const lenient = state.settings.punctLenient;
 
+  /* 逐位置铺：位置 i 要么是你写的字（黑/红），要么是原文那一个字（灰底稿）。
+     灰字的内容永远取自原文的同一位置，不会因为你写到哪而整体游动。 */
   const parts = [];
-  const upto = Math.max(written.length, 0);
+  const upto = Math.min(written.length, source.length);
   for (let index = 0; index < upto; index += 1) {
     const typed = written[index];
     const ok = charsMatch(source[index], typed, lenient);
     parts.push(`<span class="${ok ? 'ok' : 'bad'}">${escapeHtml(typed)}</span>`);
   }
-  /* 剩下的原文只在单栏模式下铺成灰字：那儿没有原文栏，它就是"底稿"，
-     抄过去变黑、抄错变红。双栏模式左边就是原文，右边再铺一层灰字，
-     只会让人以为已经替你输入好了。 */
-  const rest = state.settings.columnMode === 'single' ? source.slice(upto) : '';
-  if (rest) parts.push(`<span class="rest">${escapeHtml(rest)}</span>`);
+
+  /* 还没写到的部分铺成灰底稿 —— 只在单栏模式需要：双栏左边就是原文，
+     右边再铺一层只会让人以为已经替你输好了。 */
+  if (state.settings.columnMode === 'single') {
+    const rest = source.slice(upto);
+    if (rest) parts.push(`<span class="rest">${escapeHtml(rest)}</span>`);
+  }
+
+  /* 写得比原文还长：多出来的字也要显示，按"多写的"标红（校对清单里同样会列出来） */
+  for (let index = source.length; index < written.length; index += 1) {
+    parts.push(`<span class="bad">${escapeHtml(written[index])}</span>`);
+  }
+
   element.innerHTML = parts.join('');
 
   const selected = area.selectionStart !== area.selectionEnd;
   if (selected) {
     const [from, to] = [area.selectionStart, area.selectionEnd].sort((a, b) => a - b);
-    const spans = element.querySelectorAll('span');
-    for (let index = from; index < to && index < spans.length; index += 1) {
-      spans[index].classList.add('selected');
+    /* 只数"逐字"那两个类：底稿那一段是一个大 span，算进去会把高亮整体顶偏 */
+    const typedSpans = element.querySelectorAll('span.ok, span.bad');
+    for (let index = from; index < to && index < typedSpans.length; index += 1) {
+      typedSpans[index].classList.add('selected');
     }
   }
 }
@@ -119,7 +130,15 @@ function syncPaneLayout() {
   const paper = writingPaper.value;
   const area = writingArea.value;
   if (!paper || !area) return;
-  /* 单栏模式没有原文轨道，纸面高度就按抄写内容来（底部同样留一行） */
+
+  /* 单栏模式：纸面高度由灰底稿自己撑开（CSS 里那三层的位置也跟着换），
+     这里一概不插手 —— 否则每打一个字高度就变一次，整层底稿跟着上下跳。 */
+  if (state.settings.columnMode === 'single') {
+    paper.style.height = '';
+    area.style.height = '';
+    return;
+  }
+
   const sourceHeight = sourceTrack.value ? sourceTrack.value.offsetHeight : 0;
   area.style.height = 'auto';
   const writingHeight = area.scrollHeight;
@@ -155,9 +174,25 @@ function keepCaretVisible() {
 
 /* ── 输入 ─────────────────────────────────────────────────────────────── */
 
+let composing = false;        // 输入法正在组字
+
 function handleInput() {
   const area = writingArea.value;
   if (!area || !chapter.value) return;
+  /* 中文输入法组字时 value 每按一下都在变，这时候重画底稿会抖成一团，
+     等 compositionend 定了再算。 */
+  if (composing) return;
+
+  /* 自动补的首行缩进被删光之后，下一句仍要从那个位置起笔 ——
+     否则两栏第一行对不齐，用户还得自己敲两个全角空格。 */
+  if (!hasWrittenText(area.value)) {
+    const lead = getSourceIndent(chapter.value.content, 0);
+    if (lead && area.value !== lead) {
+      area.value = lead;
+      area.setSelectionRange(lead.length, lead.length);
+    }
+  }
+
   const next = area.value;
   const previousLength = getWritten(chapter.value).length;
   if (!practice.active && next.length) beginSession(previousLength);
@@ -169,6 +204,15 @@ function handleInput() {
   updateSentence();
   scheduleIdleFlush();
   scheduleProgressSave();
+}
+
+function handleCompositionStart() {
+  composing = true;
+}
+
+function handleCompositionEnd() {
+  composing = false;
+  handleInput();
 }
 
 let progressTimer = null;
@@ -213,7 +257,8 @@ function refreshCaretGuide() {
   const guide = caretGuide.value;
   const area = writingArea.value;
   if (!guide || !area) return;
-  const show = !hasWrittenText(area.value);
+  /* 单栏模式下整章原文就铺在底下，提示条压上去会和底稿糊成一团 —— 不显示 */
+  const show = !hasWrittenText(area.value) && state.settings.columnMode !== 'single';
   guide.classList.toggle('hidden', !show);
 }
 
@@ -268,6 +313,7 @@ async function toggleColumnMode() {
   await saveSetting('columnMode', state.settings.columnMode === 'single' ? 'split' : 'single');
   await nextTick();
   renderTypedDisplay();
+  refreshCaretGuide();          // 单栏里这条提示要立刻收起来，不能等用户打完第一个字
   syncPaneLayout();
   showToast(state.settings.columnMode === 'single'
     ? '单栏模式：原文铺成灰字，抄过去变黑，抄错变红'
@@ -420,6 +466,7 @@ defineExpose({ focusWriting, refreshAll });
                   <div id="typingDisplay" ref="typingDisplay" class="typing-display" aria-hidden="true"></div>
                   <textarea id="writingArea" ref="writingArea" spellcheck="false" aria-label="抄写输入区"
                             @input="handleInput" @keydown="handleKeydown"
+                            @compositionstart="handleCompositionStart" @compositionend="handleCompositionEnd"
                             @scroll="handleWritingScroll" @click="updateSentence"
                             @keyup="updateSentence" @select="updateSentence"></textarea>
                   <div id="caretGuide" ref="caretGuide" class="caret-guide">从这里开始，把文字写进时间里。</div>

@@ -285,11 +285,50 @@
     record('单栏切换会给出提示（不是默默生效）',
       /单栏/.test(txt($(D, '.toast'))), { toast: txt($(D, '.toast')) });
 
+    /* 底稿要钉在原文的位置上：灰字的第一笔，必须是原文"已抄到那儿"的下一个字。
+       （不能拿"已写 + 灰字"去比原文 —— 抄错的字本来就该和原文不一样。
+       这条也得在清空之前验：innerHTML 一重建，下面拿到的 span 引用就过期了。） */
+    const typedCount = $$(D, '#typingDisplay span.ok, #typingDisplay span.bad').length;
+    const restHead = restSpan ? restSpan.textContent[0] : '';
+    record('底稿钉在原文位置上：灰字紧接在已抄到的位置之后',
+      Boolean(restSpan) && restHead === source[typedCount],
+      { typed: typedCount, restHead: JSON.stringify(restHead), expected: JSON.stringify(source[typedCount]) });
+
+    /* 底稿铺在抄写区里，提示条再压上去就是两行字糊在一起。
+       先清空再验：否则"刚才写过字"也会让提示条是隐藏的，测不出真问题。 */
+    typeInto(area, '');
+    await wait(350);
+    const guide = $(D, '#caretGuide');
+    record('单栏不显示「从这里开始」（不跟底稿糊在一起）',
+      Boolean(guide) && guide.classList.contains('hidden'), {});
+
+    /* 纸面高度不能再跟着输入变 —— 那正是底稿"上下跳"的来源 */
+    const heightBefore = Math.round($(D, '#writingPaper').getBoundingClientRect().height);
+    typeInto(area, source.slice(0, 12));
+    await wait(400);
+    const heightAfter = Math.round($(D, '#writingPaper').getBoundingClientRect().height);
+    record('单栏下纸面高度不随输入变化（底稿因此不会上下跳）',
+      Math.abs(heightAfter - heightBefore) <= 2, { before: heightBefore, after: heightAfter });
+
+    /* 输入又删除：缩进与底稿起点都要回到原位 */
+    typeInto(area, '');
+    await wait(350);
+    record('把内容删光后，首行缩进会自动补回来',
+      area.value === '\u3000\u3000', { value: JSON.stringify(area.value) });
+    const restAfterClear = $(D, '#typingDisplay span.rest');
+    record('删光后底稿回到原位（起点还是原文开头）',
+      Boolean(restAfterClear) && restAfterClear.textContent.startsWith(source.slice(2, 6)),
+      { head: restAfterClear ? JSON.stringify(restAfterClear.textContent.slice(0, 6)) : null });
+
     const backButton = byText(D, '.toolbar-button', '单栏');
     if (backButton) backButton.click();
     await wait(500);
     record('切回双栏：原文栏回来、灰字收起',
       Boolean($(D, '.source-column')) && !$(D, '#typingDisplay span.rest'), {});
+
+    /* 把"全对 + 一个错字"写回去：后面的校对清单要靠这处偏差 */
+    typeInto(area, `${source.slice(0, 8)}错`);
+    await wait(300);
   }
 
   /* ══ 4. 校对清单 ════════════════════════════════════════════════════════ */
