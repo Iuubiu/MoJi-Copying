@@ -86,6 +86,8 @@ button { cursor: pointer; }
 .page-heading { display: flex; flex: 0 0 auto; align-items: end; justify-content: space-between; margin-bottom: 31px; }
 .page-heading.compact { align-items: center; }
 .eyebrow { color: var(--sage-dark); font-size: 10px; letter-spacing: 1.6px; margin: 0 0 12px; }
+/* 面包屑里的分卷这一层：压淡一点，让人一眼看出它是分组不是章节名 */
+.breadcrumbs .current.volume-title { color: #8d938c; }
 h1, h2, h3, p { margin-top: 0; }
 h1 { font-family: Georgia, "Songti SC", serif; font-size: 29px; letter-spacing: .4px; line-height: 1; font-weight: 500; margin: 0; }
 h1 em { color: #b6b3a9; font-style: normal; padding: 0 4px; }
@@ -153,6 +155,10 @@ select { color: #5e655e; border: 0; background: transparent; outline: none; font
 .typing-content { min-height: 0; }
 .typing-display span.correct { color: #3f423e; }
 .typing-display span.incorrect { color: #c3483e; }
+/* 还没写到的原文：淡色铺在下面，只是告诉你"还剩多少"。
+   这一条以前漏了，它继承了 .typing-display 的深色 —— 一进章节，抄写栏里
+   就整段整段地"像是已经输入好了"，其实是灰字。 */
+.typing-display span.rest { color: #d2d1ca; }
 .typing-display span.selected { color: #fbfaf7 !important; background: #3f423e; border-radius: 2px; box-shadow: 0 0 0 1px #3f423e; }
 .writing-column textarea { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border: 0; outline: 0; resize: none; padding: 0; color: transparent; -webkit-text-fill-color: transparent; background: transparent; caret-color: var(--rust); overflow: hidden; z-index: 2; }
 .writing-column textarea::selection { color: transparent; background: transparent; }

@@ -5,7 +5,7 @@
  * 启动顺序与旧版一致（也很重要）：先把界面画出来，再去连后端 ——
  * 用户看到窗口的瞬间就该有内容，而不是先盯着一片空白等数据库。
  */
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import AppSidebar from './components/AppSidebar.vue';
 import LibraryView from './components/LibraryView.vue';
@@ -26,6 +26,17 @@ const settingsOpen = ref(false);
 const helpOpen = ref(false);
 const fileInput = ref(null);
 const importing = ref(false);
+
+/* ── 面包屑：我的书架 / 书名 / 分卷 / 章节 ─────────────────────────────── */
+
+const currentEntry = computed(() => state.library.find(entry => entry.id === state.bookId) || null);
+const currentChapter = computed(() => {
+  const book = currentEntry.value && currentEntry.value.book;
+  return (book && book.chapters[state.chapterIndex]) || null;
+});
+const bookTitle = computed(() => (currentEntry.value ? currentEntry.value.book.title : '尚未选择书籍'));
+const volumeTitle = computed(() => (currentChapter.value ? currentChapter.value.volume : '') || '');
+const chapterTitle = computed(() => (currentChapter.value ? currentChapter.value.title : '尚未选择章节'));
 
 /* ── 启动 ─────────────────────────────────────────────────────────────── */
 
@@ -176,9 +187,12 @@ const NAV = [
       <header class="topbar">
         <div class="breadcrumbs">
           <span>我的书架</span><b>/</b>
-          <span class="current">{{ state.library.find(e => e.id === state.bookId)?.book.title || '尚未选择书籍' }}</span>
+          <span class="current">{{ bookTitle }}</span>
+          <template v-if="volumeTitle">
+            <b>/</b><span class="current volume-title">{{ volumeTitle }}</span>
+          </template>
           <b>/</b>
-          <span class="current">{{ state.library.find(e => e.id === state.bookId)?.book.chapters[state.chapterIndex]?.title || '尚未选择章节' }}</span>
+          <span class="current">{{ chapterTitle }}</span>
         </div>
         <div class="top-actions">
           <span class="save-state">

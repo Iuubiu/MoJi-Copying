@@ -159,6 +159,8 @@
   record('内容简介被单独收起来（不在正文里）',
     Boolean($(D, '.summary-card')) && txt($(D, '.summary-card')).includes('回归检查'),
     { summary: txt($(D, '.summary-card')).slice(0, 30) });
+  record('面包屑带上分卷这一层（我的书架 / 书名 / 卷 / 章节）',
+    txt($(D, '.breadcrumbs')).includes('第一部 上卷'), { breadcrumbs: txt($(D, '.breadcrumbs')) });
   byText(D, '.main-nav .nav-item', '抄写工作台').click();
   await frame(D);
   await wait(350);
@@ -182,6 +184,18 @@
     element.value = value;
     element.dispatchEvent(new D.defaultView.Event('input', { bubbles: true }));
   };
+
+  /* 章节标题与正文各归各位：标题只出现在标题里，不能混进正文头几行 */
+  record('章节标题没有混进正文',
+    Boolean(txt($(D, '#pageTitle'))) && !source.startsWith(txt($(D, '#pageTitle'))),
+    { title: txt($(D, '#pageTitle')), sourceHead: source.slice(0, 16) });
+
+  /* 校对层里"还没写到的原文"必须是淡色：它和"已经写进去的字"同为深色时，
+     整段原文看起来就像已经被自动填进抄写栏了（这条以前真的漏了）。 */
+  const restSpan = $(D, '#typingDisplay span.rest');
+  const restColor = restSpan ? getComputedStyle(restSpan).color : '';
+  record('还没写到的原文是淡色（不会被看成"已经输入好了"）',
+    Boolean(restSpan) && restColor !== 'rgb(63, 66, 62)', { rest: restColor });
 
   record('新章节自动补上原文首行缩进（两栏第一行对得齐）',
     area.value.startsWith('\u3000\u3000'), { typed: JSON.stringify(area.value.slice(0, 4)) });
