@@ -298,6 +298,8 @@ watch(() => state.sourceHighlight, mark => {
 });
 
 watch(() => [state.bookId, state.chapterIndex], refreshAll);
+/* 章节列表里重置/删除章节后，正文在内存里变了，这里要跟着重读 */
+watch(() => state.refreshToken, refreshAll);
 watch(() => state.fontSize, () => {
   if (writingArea.value) writingArea.value.style.fontSize = `${state.fontSize}px`;
   nextTick(syncPaneLayout);

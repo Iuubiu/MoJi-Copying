@@ -154,12 +154,14 @@ node verify/test-encoding.js       # 编码探测 21 项
 # 界面回归：CDP 驱动真实浏览器（附着方式见 verify/cdp-attach.js 顶部注释）
 npm run build                                      # 先生成 dist/
 python -m server --port 41777 --db ./test.sqlite3  # 用临时库起后端，别动真实数据
-node verify/cdp-attach.js <debugPort> verify/checks-vue-app.js   # 16 项
+node verify/cdp-attach.js <debugPort> verify/checks-vue-app.js   # 62 项，全部从用户视角看
 ```
 
 写的时候踩过的坑都留了注释：为什么落库要每 5 秒一次、为什么退出时要留一份快照、
-为什么速度的分子分母必须同口径 —— 这些在界面上只表现为"数字不太对"，肉眼很难发现，
-所以每条都配了回归检查。
+为什么速度的分子分母必须同口径、为什么原文轨道（`<pre>`）也得套上正文的字体声明 ——
+这些在界面上只表现为"数字不太对"或者"两栏悄悄错行"，肉眼很难发现，
+所以每条都配了回归检查。界面这一份刻意不碰内部状态：导入是构造 File 塞进
+`input[type=file]`，重开软件是新建一个 iframe，结算靠切书触发 —— 走的都是用户的路。
 
 ## 许可
 

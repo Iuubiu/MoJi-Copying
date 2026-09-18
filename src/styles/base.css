@@ -119,14 +119,17 @@ select { color: #5e655e; border: 0; background: transparent; outline: none; font
 .source-column { box-shadow: inset -1px 0 0 var(--line); background: #f9f8f5; }
 .column-label { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 19px; color: #989993; font-size: 10px; letter-spacing: .7px; }
 .column-label small { color: #c5c5bf; letter-spacing: 0; font-size: 9px; }
-/* 正文排版：原文栏、输入框、校对层、空稿提示条共用同一份声明。
-   提示条原先不在这一组里，字距是 normal 而正文是 .3px，于是"两栏的字对不齐"。 */
-.source-text, .writing-column textarea, .typing-display, .caret-guide { font-family: var(--copy-font); font-size: var(--copy-font-size, 18px); line-height: var(--copy-line-height, 2); letter-spacing: var(--copy-letter-spacing, .3px); font-weight: 400; font-variant: normal; font-feature-settings: normal; font-kerning: auto; text-rendering: auto; overflow-anchor: none; }
-.source-text, .writing-column textarea, .typing-display { white-space: pre-wrap; word-break: break-all; }
+/* 正文排版：原文栏、原文轨道、输入框、校对层、空稿提示条共用同一份声明。
+   提示条原先不在这一组里，字距是 normal 而正文是 .3px，于是"两栏的字对不齐"。
+   原文轨道（<pre>）原先也不在：浏览器的默认样式会给它 monospace 字体和 1em 外边距，
+   结果两栏字体不同、字宽不同、连首行都差一行 —— 抄写时行行对不上。 */
+.source-text, .source-track, .writing-column textarea, .typing-display, .caret-guide { font-family: var(--copy-font); font-size: var(--copy-font-size, 18px); line-height: var(--copy-line-height, 2); letter-spacing: var(--copy-letter-spacing, .3px); font-weight: 400; font-variant: normal; font-feature-settings: normal; font-kerning: auto; text-rendering: auto; overflow-anchor: none; }
+.source-text, .source-track, .writing-column textarea, .typing-display { white-space: pre-wrap; word-break: break-all; }
 .source-text { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; color: #272925; user-select: none; }
 /* 抄写端末行留白所需的额外高度垫在这层"轨道"上：
    它是 scroll 容器里的普通内容，可以正常溢出滚动，不会撑开父级 flex 项。 */
-.source-track { display: block; }
+/* margin 要显式清掉：<pre> 自带 1em 上下外边距，会顶得原文比抄写层低一行 */
+.source-track { display: block; margin: 0; }
 .source-text .current-line { color: #afb4ac; }
 /* 搜索命中标记：只上底色，不碰字号/字距/内外边距，否则两栏会错行 */
 .source-mark { background: rgba(214,166,84,.34); color: inherit; border-radius: 2px; padding: 0; margin: 0; }

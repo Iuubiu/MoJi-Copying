@@ -3,8 +3,8 @@
 import { computed, ref } from 'vue';
 
 import {
-  bookTotals, currentBook, persistBook, practice, removeBook, settleSession,
-  showToast, state, writeProgress,
+  bookTotals, currentBook, hasWrittenText, persistBook, practice, removeBook,
+  requestWorkbenchRefresh, settleSession, showToast, state, writeProgress,
 } from '../composables/useStore.js';
 import { MojiStats } from '../core/index.js';
 
@@ -71,7 +71,9 @@ const rows = computed(() => {
   if (!book.value) return [];
   return book.value.chapters.slice(0, limit.value).map((chapter, index) => {
     const length = chapter.content.length;
-    const count = (chapter.written || '').length;
+    const written = chapter.written || '';
+    /* 只写了自动补的缩进不算"开始过"（与书库整体进度同一口径） */
+    const count = hasWrittenText(written) ? Math.min(written.length, length) : 0;
     return {
       chapter,
       index,
@@ -90,6 +92,8 @@ async function resetChapter(index) {
   chapter.timeSpentMs = 0;
   await persistBook(state.bookId, book.value);
   await writeProgress(state.bookId, index);
+  /* 工作台那边抄写区还留着刚被清空的内容，得让它重读一次 */
+  requestWorkbenchRefresh();
   showToast('已重置本章进度');
 }
 
@@ -103,6 +107,8 @@ async function deleteChapter(index) {
   state.chapterIndex = Math.min(state.chapterIndex, book.value.chapters.length - 1);
   /* 序号整体前移，必须整本重写（后端在同一个事务里按新序号重排进度） */
   await persistBook(state.bookId, book.value);
+  /* 删掉的是当前章的前一章时，chapterIndex 不变但内容已经换了 */
+  requestWorkbenchRefresh();
   showToast('章节已删除');
 }
 

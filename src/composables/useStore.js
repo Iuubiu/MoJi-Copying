@@ -59,6 +59,10 @@ export const state = reactive({
   daily: {},                // date → 汇总（后端算好的物化视图）
   sessions: [],
   toast: '',
+  /* 工作台的刷新信号：章节列表里重置/删除章节之后，内存里的正文已经变了，
+     但抄写区是命令式写入的（不参与响应式渲染），得有人请它重读一次。
+     章节列表与工作台是两个组件，中间就靠这个计数器通个气。 */
+  refreshToken: 0,
 });
 
 let toastTimer = null;
@@ -66,6 +70,11 @@ export function showToast(message) {
   state.toast = message;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { state.toast = ''; }, 2300);
+}
+
+/** 请工作台重读当前章节（章节列表里重置/删除后必须调用，否则抄写区留着旧内容）。 */
+export function requestWorkbenchRefresh() {
+  state.refreshToken += 1;
 }
 
 export const currentBook = computed(() => state.library.find(entry => entry.id === state.bookId)?.book || null);
@@ -491,8 +500,11 @@ export function bookTotals(book) {
   let done = 0;
   book.chapters.forEach(chapter => {
     const length = chapter.content.length;
-    const count = getWritten(chapter).length;
-    written += Math.min(count, length);
+    const raw = getWritten(chapter);
+    /* 纯缩进不算"抄过"：章节一进来就会自动补两个全角空格，按长度算的话
+       每章开局就有进度、重置之后也归不了零。口径与 chapterMetrics 保持一致。 */
+    const count = hasWrittenText(raw) ? Math.min(raw.length, length) : 0;
+    written += count;
     total += length;
     if (count > 0) started += 1;
     if (length > 0 && count >= length) done += 1;

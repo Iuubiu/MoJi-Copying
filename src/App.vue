@@ -107,7 +107,9 @@ function handleShortcuts(event) {
     return;
   }
   if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-    const book = state.library.find(entry => entry.id === state.bookId);
+    /* 书架条目的形状是 { id, book } —— 少写一层 .book，这里就会在 chapters
+       上崩掉，快捷键整个失效（外观上只是"按了没反应"，很难查，所以有回归检查）。 */
+    const book = state.library.find(entry => entry.id === state.bookId)?.book;
     const chapter = book && book.chapters[state.chapterIndex];
     if (!chapter) return;
     event.preventDefault();
