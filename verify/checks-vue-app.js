@@ -671,7 +671,72 @@
     }
   }
 
-  /* ══ 16. 收尾 ═══════════════════════════════════════════════════════════ */
+  /* ══ 16. 书架管理：改名 / 排序 / 删书 ═══════════════════════════════════ */
+
+  /* 拿一本独立的书来试，免得动了前面那些检查一直依赖的书。
+     它的正文里没有书名行，导入后书名会沿用文件名 —— 正是需要手改的场景。 */
+  const SHELF_FILE = `管理测试-${stamp}`;
+  const SHELF_NAME = `书A-${stamp}`;
+  const SHELF_TEXT = ['第一章 书架', '', '这一章用来试书架管理。'].join('\n');
+  if (await importBook(D, SHELF_FILE, SHELF_TEXT)) {
+    await wait(700);
+
+    const card = $$(D, '.book-card').find(item => txt(item).includes(SHELF_FILE));
+    record('导入的书排在书架最前面', Boolean(card) && $$(D, '.book-card')[0] === card, {});
+    record('卡片上有书籍管理入口', Boolean(card && card.querySelector('.book-more')), {});
+
+    if (card) {
+      card.querySelector('.book-more').click();
+      await wait(250);
+      record('点「⋯」打开管理菜单（改名 / 删除）',
+        Boolean(card.querySelector('.book-menu')) && $$(D, '.book-menu button').length === 2,
+        { items: $$(D, '.book-menu button').map(el => txt(el)) });
+
+      byText(D, '.book-menu button', '改名').click();
+      await frame(D);
+      await wait(400);
+      record('改名弹窗能打开，并带着当前的书名',
+        Boolean($(D, '.book-info-modal'))
+        && ($(D, '.book-info-modal input') || {}).value === SHELF_FILE,
+        { value: ($(D, '.book-info-modal input') || {}).value });
+
+      const titleInput = $(D, '.book-info-modal input');
+      titleInput.value = SHELF_NAME;
+      titleInput.dispatchEvent(new D.defaultView.Event('input', { bubbles: true }));
+      byText(D, '.book-info-modal button', '保存').click();
+      await wait(1000);
+      record('改名后书架上立刻换成新书名',
+        $$(D, '.book-card').some(item => txt(item).includes(SHELF_NAME)), {});
+      record('改名也写进了数据库（不是只动了界面）',
+        (await (await fetch('/api/bootstrap')).json()).books.some(item => item.book.title === SHELF_NAME), {});
+    }
+
+    /* 排序：切成「按书名」，书架顺序应该真的跟着变 */
+    byText(D, '.side-section-label button', '按').click();
+    await wait(350);
+    const titles = $$(D, '.book-card .book-title').map(el => txt(el));
+    const sorted = [...titles].sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+    record('切到「按书名」后书架真的按书名排了',
+      titles.length >= 2 && JSON.stringify(titles) === JSON.stringify(sorted), { titles });
+    byText(D, '.side-section-label button', '按').click();
+    await wait(300);
+
+    /* 删书 */
+    const beforeDelete = $$(D, '.book-card').length;
+    const deleteCard = $$(D, '.book-card').find(item => txt(item).includes(SHELF_NAME));
+    deleteCard.querySelector('.book-more').click();
+    await wait(250);
+    $$(D, '.book-menu button').find(el => txt(el).includes('删除')).click();
+    await wait(1000);
+    record('从书架删除后这本书就没了（其余的书不受影响）',
+      $$(D, '.book-card').length === beforeDelete - 1
+      && !$$(D, '.book-card').some(item => txt(item).includes(SHELF_NAME)),
+      { before: beforeDelete, after: $$(D, '.book-card').length });
+    record('删除也写进了数据库',
+      !(await (await fetch('/api/bootstrap')).json()).books.some(item => item.book.title === SHELF_NAME), {});
+  }
+
+  /* ══ 17. 收尾 ═══════════════════════════════════════════════════════════ */
 
   fresh.remove();
   await wait(1200);

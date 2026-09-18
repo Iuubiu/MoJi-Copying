@@ -197,6 +197,24 @@ export async function saveSetting(key, value) {
   upsert(snapshot.settings, { key, value }, 'key');
 }
 
+/** 改书名 / 作者 / 简介：整本写回（后端在同一个事务里更新元信息与章节）。 */
+export async function updateBookInfo(bookId, patch) {
+  const entry = state.library.find(item => item.id === bookId);
+  if (!entry) return null;
+  if (patch.title !== undefined) {
+    const title = String(patch.title).trim();
+    if (title) entry.book.title = title;      // 空书名不接受：卡片上会变成一片空白
+  }
+  if (patch.author !== undefined) {
+    entry.book.author = String(patch.author).trim() || '本地文本';
+  }
+  if (patch.summary !== undefined) {
+    entry.book.summary = String(patch.summary);
+  }
+  await persistBook(bookId, entry.book);
+  return entry.book;
+}
+
 export async function removeBook(bookId) {
   await api.deleteBook(bookId);
   snapshot.books = snapshot.books.filter(item => item.id !== bookId);

@@ -30,18 +30,30 @@ button { cursor: pointer; }
 .brand-mark { width: 35px; height: 35px; border-radius: 11px; display: grid; place-items: center; color: #f7f5ef; background: var(--ink); font-family: Georgia, serif; font-size: 18px; box-shadow: 0 5px 15px rgba(38,39,38,.15); }
 .brand-name { font-family: Georgia, "Songti SC", serif; font-size: 22px; letter-spacing: 1px; line-height: 1; }
 .brand-subtitle { color: var(--muted); font-size: 10px; margin-top: 5px; letter-spacing: .4px; }
-.side-section-label { color: #96978f; font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; padding: 0 12px 12px; }
-.side-section-label span { float: right; font-size: 10px; color: #b0b0a9; }
+.side-section-label { display: flex; align-items: center; gap: 8px; color: #96978f; font-size: 11px; letter-spacing: 1.2px; padding: 0 12px 12px; }
+.side-section-label .label-count { margin-left: auto; font-size: 10px; color: #b0b0a9; }
+/* 书架排序：两档来回切，切完记住 */
+.side-section-label .shelf-sort { border: 0; background: transparent; color: #b0b0a9; font-size: 10px; letter-spacing: .4px; padding: 0; }
+.side-section-label .shelf-sort:hover { color: var(--ink); }
 .shelf-list { display: grid; gap: 5px; max-height: 250px; overflow-y: auto; }
-.book-card { width: 100%; border: 1px solid transparent; border-radius: 10px; background: transparent; display: flex; align-items: center; padding: 10px 10px; text-align: left; color: var(--ink); cursor: pointer; }
+/* 卡片是竖排的三行：书名 / 作者 / 章数进度。原来是 flex 横排，
+   而选择器还停在旧版的 .book-info 上，样式一直没落到位。 */
+.book-card { position: relative; width: 100%; border: 1px solid transparent; border-radius: 10px; background: transparent; display: flex; flex-direction: column; align-items: stretch; padding: 9px 11px; text-align: left; color: var(--ink); cursor: pointer; }
+.book-title, .book-author, .book-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-title { font-size: 12px; font-weight: 600; }
+.book-author { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.book-card small { margin-top: 5px; color: #b0b0a9; font-size: 10px; }
+/* 卡片右上角的管理入口：平时藏着，鼠标移上去才出现 */
+.book-more { position: absolute; right: 5px; top: 5px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 5px; color: #a8aaa4; font-size: 14px; line-height: 1; opacity: 0; transition: opacity .15s, background .15s; }
+.book-card:hover .book-more, .book-more:focus { opacity: 1; }
+.book-more:hover { background: rgba(40, 42, 38, .07); color: var(--ink); }
+.book-menu { position: absolute; right: 3px; top: 25px; z-index: 30; min-width: 124px; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 10px 24px rgba(40, 42, 38, .14); padding: 4px; display: grid; }
+.book-menu button { border: 0; background: transparent; text-align: left; padding: 7px 10px; border-radius: 6px; color: #5c605a; font-size: 11px; }
+.book-menu button:hover { background: var(--sage-wash); }
+.book-menu button.danger { color: #b4483e; }
+.book-menu button.danger:hover { background: rgba(195, 72, 62, .08); }
 .book-card.active { background: rgba(255,255,255,.68); border-color: #e2dfd6; box-shadow: 0 4px 10px rgba(47,48,43,.025); }
 .book-card:hover { background: rgba(255,255,255,.5); }
-.book-cover { width: 31px; height: 39px; flex: none; border-radius: 3px 5px 5px 3px; display: grid; place-content: center; line-height: 1.1; text-align: center; color: #f1eee7; background: #71816a; font-family: Georgia, "Songti SC", serif; font-size: 11px; box-shadow: inset -4px 0 rgba(34,55,37,.1); }
-.book-info { min-width: 0; flex: 1; padding-left: 11px; }
-.book-info strong, .book-info small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.book-info strong { font-size: 12px; font-weight: 600; }
-.book-info small { margin-top: 5px; color: var(--muted); font-size: 10px; }
-.book-more { border: 0; background: transparent; color: var(--muted-2); font-size: 19px; line-height: 1; padding: 0 0 2px 6px; }
 .add-book-button { border: 0; background: transparent; color: #777b75; text-align: left; font-size: 12px; padding: 15px 12px 31px; }
 .add-book-button span { font-size: 17px; vertical-align: -1px; margin-right: 5px; color: var(--sage-dark); }
 .encoding-picker { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -21px 12px 22px; color: #a4a49d; font-size: 9px; }
@@ -359,6 +371,9 @@ kbd { border: 1px solid #ddd9d1; border-radius: 3px; padding: 2px 4px; color: #9
 .modal-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: rgba(33,35,33,.27); backdrop-filter: blur(3px); }
 .modal-backdrop[hidden] { display: none; }
 .modal { width: min(465px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 13px; padding: 25px; box-shadow: 0 20px 70px rgba(39,40,35,.2); animation: modalIn .2s ease both; }
+/* 书籍信息弹窗：简介是长文本，给一个看得清几行的输入框 */
+.book-info-modal { width: min(520px, 100%); }
+.book-info-modal textarea { width: 100%; min-height: 110px; resize: vertical; font: inherit; line-height: 1.8; }
 @keyframes modalIn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
 .modal-header { display: flex; justify-content: space-between; align-items: start; }
 .modal h2 { font-family: Georgia, "Songti SC", serif; font-weight: 500; font-size: 24px; margin: 0; }
