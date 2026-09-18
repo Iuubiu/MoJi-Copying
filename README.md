@@ -41,26 +41,26 @@
 
 ## 快速开始
 
-Windows 上双击 **`启动墨迹.cmd`** 就行：起服务、开浏览器，窗口一闪而过，服务待在后台。
-连点两下也没关系 —— 已经在跑的时候它只把浏览器叫出来，不会起第二个实例。
-
-命令行（任何平台）：
+**桌面版**（Tauri：独立窗口，可打成安装包，数据在本机）：
 
 ```bash
-python -m server --open                   # 起服务并打开浏览器（默认 http://127.0.0.1:47299）
-python -m server --port 8000              # 换个端口
-python -m server --db ./practice.sqlite3  # 把库放到指定位置
-python -m server                          # 只在后台起服务，自己开浏览器
+npm install            # 第一次
+npm run app:dev        # 开发：前端热更新 + 打开窗口
+npm run app:build      # 打包：NSIS 安装包落在 src-tauri/target/release/bundle/
 ```
 
-需要 Python 3.10+，只用标准库，**不需要安装任何第三方依赖**。
+需要 Node 20+ 与 Rust 工具链（Windows 上走 MSVC）。前端是 Vue 3 + Vite，
+数据层是 Rust + SQLite —— 编译产物约 5MB，不依赖 Python，也不开任何端口。
 
-**想让它看起来像个应用**：用 Edge / Chrome 打开后，地址栏右侧会出现「安装」图标，
-装上就是独立窗口（有任务栏图标和开始菜单项，和浏览器标签页分开）；
-不想装就用普通标签页，功能完全一样。
+**浏览器模式**（改前端不用等编译，适合边写边调）：
 
-Windows 上还有打包好的桌面版（自带窗口，不需要浏览器）：见
-[`desktop/使用说明.md`](desktop/使用说明.md)。
+```bash
+npm run build          # 生成 dist/
+python -m server --open
+```
+
+Python 后端只用标准库（3.10+），端点与 Rust 端一一对应。Windows 上也可以直接双击
+`启动墨迹.cmd`：起服务、开浏览器，连点两下不会起两个实例。
 
 ## 上手三步
 
@@ -72,30 +72,31 @@ Windows 上还有打包好的桌面版（自带窗口，不需要浏览器）：
 
 ## 架构
 
-前后端分离，两端都尽量保持"没有魔法"：
-
 ```
-web/                 前端：原生 HTML / CSS / JavaScript，无框架、无构建步骤
-  index.html
-  app.js             渲染 / 交互 / 会话计时与落库
-  api.js             后端 REST 客户端 —— 前后端之间唯一的通道
-  stats.js           统计纯计算层（Node 侧有 82 项回归测试）
-  encoding.js        文本编码探测（同）
-server/              后端：Python 标准库 + SQLite，零第三方依赖
-  store.py           SQLite 持久层：六张表 + daily 物化视图
-  api.py             REST 路由
-  http_app.py        HTTP 服务：静态资源与 API 同端口
-  paths.py           数据目录 / 前端目录约定
-  tests/             后端回归测试（unittest）
-desktop/             桌面外壳（pywebview + WebView2）
+src/                 前端：Vue 3 + Vite
+  api/index.js       数据层：桌面里走 IPC，浏览器里走 HTTP（方法名与返回形状一致）
+  core/              纯计算层：统计、编码探测、文本与校对（Node 侧有 82 项回归测试）
+  composables/       全局状态：书架、会话计时与落库、统计合成
+  components/        视图：工作台 / 章节目录 / 统计 / 设置
+src-tauri/           桌面版：Tauri 2 + Rust
+  src/store.rs       SQLite 持久层：六张表 + daily 物化视图
+  src/commands.rs    IPC 命令（与 HTTP 端点一一对应）
+server/              浏览器模式的后端：Python 标准库 + SQLite，零第三方依赖
+web/                 免构建的备用前端（没跑过 npm 时 Python 后端用它兜底）
+desktop/             PyInstaller + pywebview 的另一种桌面打包方式
 verify/              端到端回归（CDP 驱动真实浏览器）
 ```
 
-后端只负责存，不算：统计、校对、完成度放在前端的纯函数里（有 82 项 Node 测试盯着），
-`daily` 由后端在写入会话的同一个事务里从 `sessions` 重算 —— 统计口径只有一个来源。
+两条数据通道（IPC / HTTP）的端点一一对应，所以同一份前端既能在桌面里跑，
+也能在浏览器里跑；加功能时两端各加一个端点，再往 `src/api/index.js` 加一个方法。
 
-前后端同源，默认不用管跨域。想把前端单独部署（前端 5173、后端 8000），
-在 `web/index.html` 里写上后端地址即可：
+后端只负责存、不算：统计、校对、完成度都放在前端的纯函数里（有 82 项 Node 测试
+盯着），`daily` 由后端在写入会话的同一个事务里从 `sessions` 重算 ——
+统计口径只有一个来源。
+
+桌面版不开任何端口；浏览器模式下 Python 服务只监听 `127.0.0.1`，
+也只对本机来源回 CORS 头。想把前端单独部署（前端 5173、后端 8000），
+在页面里写上后端地址即可：
 
 ```html
 <meta name="moji-api" content="http://127.0.0.1:8000" />

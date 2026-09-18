@@ -42,10 +42,16 @@ def project_root() -> str:
 def web_dir() -> str:
     """前端资源目录。
 
-    打包成单文件 EXE 后，PyInstaller 把 datas 解到 sys._MEIPASS 下，
-    前端在 <_MEIPASS>/web；源码运行时就是项目根下的 web/。
+    优先用 Vite 的构建产物 `dist/` —— 前后端分离后前端只有这一份，
+    桌面版（Tauri）与浏览器模式（这个 Python 后端）读的是同一套页面。
+    还没构建过就回退到 `web/`（无需构建的那份），保证 `python -m server`
+    在没跑过 npm 的机器上也能开起来。
     """
     if getattr(sys, 'frozen', False):
         base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(sys.executable)))
         return os.path.join(base, 'web')
-    return os.path.join(project_root(), 'web')
+    root = project_root()
+    built = os.path.join(root, 'dist')
+    if os.path.isfile(os.path.join(built, 'index.html')):
+        return built
+    return os.path.join(root, 'web')
