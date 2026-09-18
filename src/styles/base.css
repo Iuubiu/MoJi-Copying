@@ -157,7 +157,11 @@ select { color: #5e655e; border: 0; background: transparent; outline: none; font
    结果两栏字体不同、字宽不同、连首行都差一行 —— 抄写时行行对不上。 */
 .source-text, .source-track, .writing-column textarea, .typing-display, .caret-guide { font-family: var(--copy-font); font-size: var(--copy-font-size, 18px); line-height: var(--copy-line-height, 2); letter-spacing: var(--copy-letter-spacing, .3px); font-weight: 400; font-variant: normal; font-feature-settings: normal; font-kerning: auto; text-rendering: auto; overflow-anchor: none; }
 .source-text, .source-track, .writing-column textarea, .typing-display { white-space: pre-wrap; word-break: break-all; }
-.source-text { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; color: #272925; user-select: none; }
+/* 原文栏的滚动条也做成不占位的（跟抄写栏一样）：一旦它占掉 15px，
+   正文的可用宽度就比抄写栏窄，两栏的换行点会从那一处起全部错开。
+   滚动照样能用（滚轮），而且两栏是同步滚的。 */
+.source-text { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; color: #272925; user-select: none; }
+.source-text::-webkit-scrollbar { width: 0; height: 0; }
 /* 抄写端末行留白所需的额外高度垫在这层"轨道"上：
    它是 scroll 容器里的普通内容，可以正常溢出滚动，不会撑开父级 flex 项。 */
 /* margin 要显式清掉：<pre> 自带 1em 上下外边距，会顶得原文比抄写层低一行 */
@@ -176,10 +180,13 @@ select { color: #5e655e; border: 0; background: transparent; outline: none; font
 /* 校对层：抄对的深色、抄错的红色。
    类名是 ok / bad，必须和 renderTypedDisplay 里生成的完全一致 ——
    这里以前写的是 correct / incorrect，对不上，于是红字静悄悄地一直没生效。 */
+/* 灰底稿：整章原文，铺在最底下（只有单栏模式有内容）。
+   它不参与逐字校对那一层，所以打字、删字、跳着写，它都钉在原地。 */
+.ghost-layer { color: #d2d1ca; }
+/* 你写的字：盖在底稿上面的一层，逐字黑 / 红 */
+.typed-layer { position: absolute; inset: 0; }
 .typing-display span.ok { color: #3f423e; }
 .typing-display span.bad { color: #c3483e; }
-/* 还没写到的原文（只有单栏模式才铺）：淡色底稿，抄过去就变成上面的黑白两色 */
-.typing-display span.rest { color: #d2d1ca; }
 .typing-display span.selected { color: #fbfaf7 !important; background: #3f423e; border-radius: 2px; box-shadow: 0 0 0 1px #3f423e; }
 .writing-column textarea { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border: 0; outline: 0; resize: none; padding: 0; color: transparent; -webkit-text-fill-color: transparent; background: transparent; caret-color: var(--rust); overflow: hidden; z-index: 2; }
 .writing-column textarea::selection { color: transparent; background: transparent; }

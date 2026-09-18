@@ -24,7 +24,8 @@ const writingArea = ref(null);
 const sourcePane = ref(null);
 const sourceTrack = ref(null);
 const writingPaper = ref(null);
-const typingDisplay = ref(null);
+const ghostLayer = ref(null);     // 灰底稿：整章原文，固定不动
+const typedLayer = ref(null);     // 你写的字：盖在底稿上面
 const caretGuide = ref(null);
 
 const chapter = computed(() => currentChapter.value);
@@ -68,46 +69,45 @@ const sourceHtml = computed(() => {
 
 /* ── 校对显示层 ───────────────────────────────────────────────────────── */
 
-/** 把「原文 vs 已写」逐字铺成彩色文字：对的黑色、错的红色、没到的地方灰着。 */
+/**
+ * 灰底稿：整章原文，铺在抄写区最底下。
+ *
+ * 只在单栏模式、且只在换章 / 换模式时画一次 —— 它不参与逐字校对那一层，
+ * 所以你无论写、删、跳着写，底稿都钉在原地不动。双栏模式不铺（左边就是原文）。
+ */
+function renderGhost() {
+  const ghost = ghostLayer.value;
+  if (!ghost) return;
+  const source = chapter.value ? chapter.value.content : '';
+  const next = state.settings.columnMode === 'single' ? source : '';
+  if (ghost.textContent !== next) ghost.textContent = next;
+}
+
+/** 你写的那一层：逐字铺成彩色文字 —— 对的黑色、错的红色，写得比原文长也照样显示。 */
 function renderTypedDisplay() {
-  const element = typingDisplay.value;
+  const element = typedLayer.value;
   const area = writingArea.value;
   if (!element || !area || !chapter.value) return;
   const source = chapter.value.content;
   const written = area.value;
   const lenient = state.settings.punctLenient;
 
-  /* 逐位置铺：位置 i 要么是你写的字（黑/红），要么是原文那一个字（灰底稿）。
-     灰字的内容永远取自原文的同一位置，不会因为你写到哪而整体游动。 */
   const parts = [];
-  const upto = Math.min(written.length, source.length);
-  for (let index = 0; index < upto; index += 1) {
+  for (let index = 0; index < written.length; index += 1) {
     const typed = written[index];
-    const ok = charsMatch(source[index], typed, lenient);
+    /* 写到原文以外的地方算"多写的"，一样标红 */
+    const ok = index < source.length && charsMatch(source[index], typed, lenient);
     parts.push(`<span class="${ok ? 'ok' : 'bad'}">${escapeHtml(typed)}</span>`);
   }
-
-  /* 还没写到的部分铺成灰底稿 —— 只在单栏模式需要：双栏左边就是原文，
-     右边再铺一层只会让人以为已经替你输好了。 */
-  if (state.settings.columnMode === 'single') {
-    const rest = source.slice(upto);
-    if (rest) parts.push(`<span class="rest">${escapeHtml(rest)}</span>`);
-  }
-
-  /* 写得比原文还长：多出来的字也要显示，按"多写的"标红（校对清单里同样会列出来） */
-  for (let index = source.length; index < written.length; index += 1) {
-    parts.push(`<span class="bad">${escapeHtml(written[index])}</span>`);
-  }
-
   element.innerHTML = parts.join('');
 
   const selected = area.selectionStart !== area.selectionEnd;
   if (selected) {
     const [from, to] = [area.selectionStart, area.selectionEnd].sort((a, b) => a - b);
-    /* 只数"逐字"那两个类：底稿那一段是一个大 span，算进去会把高亮整体顶偏 */
-    const typedSpans = element.querySelectorAll('span.ok, span.bad');
-    for (let index = from; index < to && index < typedSpans.length; index += 1) {
-      typedSpans[index].classList.add('selected');
+    /* 这一层里全是逐字的 span，下标就是正文下标，直接照着高亮 */
+    const spans = element.querySelectorAll('span');
+    for (let index = from; index < to && index < spans.length; index += 1) {
+      spans[index].classList.add('selected');
     }
   }
 }
@@ -312,6 +312,7 @@ async function togglePunct() {
 async function toggleColumnMode() {
   await saveSetting('columnMode', state.settings.columnMode === 'single' ? 'split' : 'single');
   await nextTick();
+  renderGhost();                // 单栏才有灰底稿，切换时要铺上 / 收起
   renderTypedDisplay();
   refreshCaretGuide();          // 单栏里这条提示要立刻收起来，不能等用户打完第一个字
   syncPaneLayout();
@@ -336,6 +337,7 @@ function refreshAll() {
         }
       }
     }
+    renderGhost();
     renderTypedDisplay();
     refreshCaretGuide();
     syncPaneLayout();
@@ -463,7 +465,12 @@ defineExpose({ focusWriting, refreshAll });
               <div class="column-label"><span>你的抄写</span><small>{{ hasWrittenText(getWritten(chapter)) ? '正在校对' : '点击右侧开始输入' }}</small></div>
               <div class="writing-stage" :style="{ fontSize: state.fontSize + 'px' }">
                 <div id="writingPaper" ref="writingPaper" class="writing-paper">
-                  <div id="typingDisplay" ref="typingDisplay" class="typing-display" aria-hidden="true"></div>
+                  <!-- 两层：灰底稿固定不动，你写的字盖在上面。
+                       灰字之所以能"钉住"，就是因为它根本不参与逐字校对那一层。 -->
+                  <div id="typingDisplay" class="typing-display" aria-hidden="true">
+                    <div id="ghostLayer" ref="ghostLayer" class="ghost-layer"></div>
+                    <div id="typedLayer" ref="typedLayer" class="typed-layer"></div>
+                  </div>
                   <textarea id="writingArea" ref="writingArea" spellcheck="false" aria-label="抄写输入区"
                             @input="handleInput" @keydown="handleKeydown"
                             @compositionstart="handleCompositionStart" @compositionend="handleCompositionEnd"

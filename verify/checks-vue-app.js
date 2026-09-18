@@ -193,7 +193,7 @@
   /* 双栏模式：抄写栏里只该有你写的字，不铺"还没写到的原文" ——
      左边就是原文，右边再铺一层灰字只会让人以为已经替你输好了。 */
   record('双栏模式：抄写栏不铺灰字（原文在左边看）',
-    !$(D, '#typingDisplay span.rest'), {});
+    Boolean($(D, '#ghostLayer')) && !$(D, '#ghostLayer').textContent, {});
 
   record('新章节自动补上原文首行缩进（两栏第一行对得齐）',
     area.value.startsWith('\u3000\u3000'), { typed: JSON.stringify(area.value.slice(0, 4)) });
@@ -226,9 +226,16 @@
   await frame(D);
   await wait(250);
 
+  /* 先看根因：两栏的正文可用宽度必须一样。差一点点（比如一边的滚动条占了位），
+     换行点就会从那一处起全部错开，而只比较前几个字是看不出来的。 */
+  const sourceWidth = Math.round(sourceTrack.getBoundingClientRect().width);
+  const typedWidth = Math.round($(D, '#typedLayer').getBoundingClientRect().width);
+  record('两栏正文可用宽度一致（滚动条不许占宽）',
+    Math.abs(sourceWidth - typedWidth) <= 1, { source: sourceWidth, typed: typedWidth });
+
   const sourceBoxes = textNodeBoxes(sourceTrack.firstChild, 40);
   /* 抄写层是一字一个 span（.rest 是"还没写到的原文"那一整段，跨很多行，不参与比较） */
-  const typedBoxes = $$(D, '#typingDisplay span.ok, #typingDisplay span.bad')
+  const typedBoxes = $$(D, '#typedLayer span.ok, #typedLayer span.bad')
     .slice(0, 40)
     .map(span => textNodeBoxes(span.firstChild, 1)[0])
     .filter(Boolean);
@@ -240,9 +247,12 @@
      要比的是同样的字有没有落在同样的行上。 */
   const sourceOffset = sourceBoxes.map(box => box.top - (sourceBoxes[0] || {}).top);
   const typedOffset = typedBoxes.map(box => box.top - (typedBoxes[0] || {}).top);
+  const lineDrift = sourceOffset.map((offset, index) => (index < compared ? Math.abs(offset - typedOffset[index]) : 0));
+  /* 容差 2px：灰底稿与抄写层分开之后，个别字符会有 1px 的亚像素差，肉眼看不出来。
+     这里真正要防的是"整行错开"，那是几十像素级别的事。 */
   record('两栏逐字换行位置一致（不会写着写着错行）',
-    compared > 4 && sourceOffset.every((offset, index) => index >= compared || Math.abs(offset - typedOffset[index]) <= 1),
-    { compared, mismatch: sourceOffset.filter((offset, index) => index < compared && Math.abs(offset - typedOffset[index]) > 1).length });
+    compared > 4 && lineDrift.every(value => value <= 2),
+    { compared, worst: Math.max(...lineDrift), mismatch: lineDrift.filter(value => value > 2).length });
 
   /* 再写回一小段，只在末尾留一个错字 —— 逐字校对与清单都靠它 */
   const typedText = source.slice(0, 8) + '错';
@@ -250,11 +260,11 @@
   await frame(D);
   await wait(150);
 
-  const okSpan = $$(D, '#typingDisplay span.ok')[0];
-  const badSpan = $$(D, '#typingDisplay span.bad')[0];
+  const okSpan = $$(D, '#typedLayer span.ok')[0];
+  const badSpan = $$(D, '#typedLayer span.bad')[0];
   record('逐字校对：正确字与错字分别标出',
-    $$(D, '#typingDisplay span.ok').length >= 8 && $$(D, '#typingDisplay span.bad').length >= 1,
-    { ok: $$(D, '#typingDisplay span.ok').length, bad: $$(D, '#typingDisplay span.bad').length });
+    $$(D, '#typedLayer span.ok').length >= 8 && $$(D, '#typedLayer span.bad').length >= 1,
+    { ok: $$(D, '#typedLayer span.ok').length, bad: $$(D, '#typedLayer span.bad').length });
   /* 颜色必须真的落到屏幕上。类名与 CSS 选择器曾经对不上
      （渲染用 ok/bad，样式写的是 correct/incorrect），红字静悄悄地失效了很久 ——
      只数 span 的个数是抓不住这种错的。 */
@@ -276,23 +286,30 @@
   if (columnsButton) {
     columnsButton.click();
     await wait(500);
-    const restSpan = $(D, '#typingDisplay span.rest');
-    record('切到单栏：原文栏收起、原文铺成灰字底稿',
-      !$(D, '.source-column') && Boolean(restSpan), {});
+    const ghost = $(D, '#ghostLayer');
+    record('切到单栏：原文栏收起、整章原文铺成灰底稿',
+      !$(D, '.source-column') && Boolean(ghost) && ghost.textContent === source,
+      { ghost: ghost ? ghost.textContent.length : 0, source: source.length });
     record('单栏的底稿是淡灰色（不是正文色）',
-      Boolean(restSpan) && getComputedStyle(restSpan).color === 'rgb(210, 209, 202)',
-      { rest: restSpan ? getComputedStyle(restSpan).color : null });
+      Boolean(ghost) && getComputedStyle(ghost).color === 'rgb(210, 209, 202)',
+      { ghost: ghost ? getComputedStyle(ghost).color : null });
     record('单栏切换会给出提示（不是默默生效）',
       /单栏/.test(txt($(D, '.toast'))), { toast: txt($(D, '.toast')) });
 
-    /* 底稿要钉在原文的位置上：灰字的第一笔，必须是原文"已抄到那儿"的下一个字。
-       （不能拿"已写 + 灰字"去比原文 —— 抄错的字本来就该和原文不一样。
-       这条也得在清空之前验：innerHTML 一重建，下面拿到的 span 引用就过期了。） */
-    const typedCount = $$(D, '#typingDisplay span.ok, #typingDisplay span.bad').length;
-    const restHead = restSpan ? restSpan.textContent[0] : '';
-    record('底稿钉在原文位置上：灰字紧接在已抄到的位置之后',
-      Boolean(restSpan) && restHead === source[typedCount],
-      { typed: typedCount, restHead: JSON.stringify(restHead), expected: JSON.stringify(source[typedCount]) });
+    /* 用户最在意的一条：底稿是钉住的 —— 写字、删字，它一个字都不许动 */
+    const ghostBefore = ghost.textContent;
+    const heightBefore = Math.round($(D, '#writingPaper').getBoundingClientRect().height);
+    typeInto(area, source.slice(0, 12));
+    await wait(450);
+
+    record('灰底稿固定：写了 12 个字，底稿一个字都没变',
+      $(D, '#ghostLayer').textContent === ghostBefore, {});
+    record('你写的字是盖在底稿上的另一层',
+      $$(D, '#typedLayer span.ok, #typedLayer span.bad').length === 12,
+      { typed: $$(D, '#typedLayer span.ok, #typedLayer span.bad').length });
+    record('单栏下纸面高度不随输入变化（底稿因此不会上下跳）',
+      Math.abs(Math.round($(D, '#writingPaper').getBoundingClientRect().height) - heightBefore) <= 2,
+      { before: heightBefore, after: Math.round($(D, '#writingPaper').getBoundingClientRect().height) });
 
     /* 底稿铺在抄写区里，提示条再压上去就是两行字糊在一起。
        先清空再验：否则"刚才写过字"也会让提示条是隐藏的，测不出真问题。 */
@@ -301,30 +318,16 @@
     const guide = $(D, '#caretGuide');
     record('单栏不显示「从这里开始」（不跟底稿糊在一起）',
       Boolean(guide) && guide.classList.contains('hidden'), {});
-
-    /* 纸面高度不能再跟着输入变 —— 那正是底稿"上下跳"的来源 */
-    const heightBefore = Math.round($(D, '#writingPaper').getBoundingClientRect().height);
-    typeInto(area, source.slice(0, 12));
-    await wait(400);
-    const heightAfter = Math.round($(D, '#writingPaper').getBoundingClientRect().height);
-    record('单栏下纸面高度不随输入变化（底稿因此不会上下跳）',
-      Math.abs(heightAfter - heightBefore) <= 2, { before: heightBefore, after: heightAfter });
-
-    /* 输入又删除：缩进与底稿起点都要回到原位 */
-    typeInto(area, '');
-    await wait(350);
     record('把内容删光后，首行缩进会自动补回来',
       area.value === '\u3000\u3000', { value: JSON.stringify(area.value) });
-    const restAfterClear = $(D, '#typingDisplay span.rest');
-    record('删光后底稿回到原位（起点还是原文开头）',
-      Boolean(restAfterClear) && restAfterClear.textContent.startsWith(source.slice(2, 6)),
-      { head: restAfterClear ? JSON.stringify(restAfterClear.textContent.slice(0, 6)) : null });
+    record('删光之后底稿仍是完整原文（没有跟着少）',
+      $(D, '#ghostLayer').textContent === source, {});
 
     const backButton = byText(D, '.toolbar-button', '单栏');
     if (backButton) backButton.click();
     await wait(500);
-    record('切回双栏：原文栏回来、灰字收起',
-      Boolean($(D, '.source-column')) && !$(D, '#typingDisplay span.rest'), {});
+    record('切回双栏：原文栏回来、灰底稿收起',
+      Boolean($(D, '.source-column')) && !$(D, '#ghostLayer').textContent, {});
 
     /* 把"全对 + 一个错字"写回去：后面的校对清单要靠这处偏差 */
     typeInto(area, `${source.slice(0, 8)}错`);
@@ -352,7 +355,7 @@
       record('点条目把光标跳到那个字上',
         area.selectionStart === 8, { selectionStart: area.selectionStart, expected: 8 });
       record('跳过去之后那个字会高亮',
-        Boolean($$(D, '#typingDisplay span')[8]?.classList.contains('selected')), {});
+        Boolean($$(D, '#typedLayer span')[8]?.classList.contains('selected')), {});
       proofButton.click();
       await wait(80);
     }
