@@ -49,8 +49,18 @@ npm run app:dev        # 开发：前端热更新 + 打开窗口
 npm run app:build      # 打包：NSIS 安装包落在 src-tauri/target/release/bundle/
 ```
 
-需要 Node 20+ 与 Rust 工具链（Windows 上走 MSVC）。前端是 Vue 3 + Vite，
-数据层是 Rust + SQLite —— 编译产物约 5MB，不依赖 Python，也不开任何端口。
+需要 Node 20+ 与 Rust 工具链（Windows 上走 MSVC）。Rust 用 scoop 装最省事：
+
+```bash
+scoop install rustup
+rustup default stable-msvc
+```
+
+（MSVC 那一环没有包管理器能代劳，装 Visual Studio Build Tools 的
+「C++ 生成工具」工作负载即可，约 3GB。）
+
+前端是 Vue 3 + Vite，数据层是 Rust + SQLite —— 编译产物约 4MB，
+不依赖 Python，也不开任何端口。
 
 **浏览器模式**（改前端不用等编译，适合边写边调）：
 
