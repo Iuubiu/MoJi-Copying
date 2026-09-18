@@ -86,6 +86,11 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleShortcuts);
 });
 
+function toggleSepia() {
+  state.sepia = !state.sepia;
+  showToast(state.sepia ? '已切换护眼色' : '已恢复默认色');
+}
+
 /* ── 快捷键 ───────────────────────────────────────────────────────────── */
 
 function handleShortcuts(event) {
@@ -154,7 +159,7 @@ const NAV = [
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'focus-mode': state.focusMode }">
+  <div class="app-shell" :class="{ 'focus-mode': state.focusMode, 'sepia-mode': state.sepia }">
     <AppSidebar :on-import="() => fileInput.click()" :on-settings="() => (settingsOpen = true)" />
 
     <main class="main-content">
@@ -172,6 +177,7 @@ const NAV = [
           </span>
           <button class="icon-button" type="button" aria-label="导入新小说" title="导入新小说"
                   @click="fileInput.click()">＋</button>
+          <button class="icon-button" type="button" aria-label="护眼色" title="护眼色" @click="toggleSepia">☼</button>
           <button class="icon-button" type="button" aria-label="专注模式" title="专注模式"
                   @click="state.focusMode = !state.focusMode">⛶</button>
           <button class="icon-button" type="button" aria-label="帮助" title="使用提示" @click="helpOpen = true">?</button>

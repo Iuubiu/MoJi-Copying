@@ -15,7 +15,7 @@ import {
   beginSession, chapterMetrics, currentBook, currentChapter, flushSession, getWritten,
   hasWrittenText, practice, saveSetting, scheduleIdleFlush, state, writeProgress,
 } from '../composables/useStore.js';
-import { charsMatch, getSourceIndent, sentenceAt } from '../core/text.js';
+import { charsMatch, differenceList, getSourceIndent, sentenceAt } from '../core/text.js';
 import { MojiStats } from '../core/index.js';
 
 const { formatNumber, formatClock, formatDuration, dateKey } = MojiStats;
@@ -30,6 +30,41 @@ const caretGuide = ref(null);
 const chapter = computed(() => currentChapter.value);
 const sentence = ref({ text: '', meta: '' });
 const selection = ref({ start: 0, end: 0 });
+const proofOpen = ref(false);
+
+/* ── 校对清单 ─────────────────────────────────────────────────────────── */
+
+/** 每一处偏差：你写的字 vs 原文该有的字。点击跳到那个字上。 */
+const diffs = computed(() => {
+  void practice.tick;
+  if (!chapter.value) return [];
+  return differenceList(
+    chapter.value.content,
+    getWritten(chapter.value),
+    state.settings.punctLenient,
+  );
+});
+
+function jumpTo(index) {
+  const area = writingArea.value;
+  if (!area) return;
+  area.focus();
+  area.setSelectionRange(index, index + 1);
+  keepCaretVisible();
+  updateSentence();
+}
+
+/* ── 原文高亮 ─────────────────────────────────────────────────────────── */
+
+/** 搜索命中或校对跳转时，把命中的那几个字在原文里标出来（其余原样）。 */
+const sourceHtml = computed(() => {
+  const text = chapter.value ? chapter.value.content : '';
+  const mark = state.sourceHighlight;
+  if (!mark || mark.at == null || mark.at < 0) return escapeHtml(text);
+  const from = Math.max(0, Math.min(mark.at, text.length));
+  const to = Math.min(text.length, from + (mark.len || 0));
+  return `${escapeHtml(text.slice(0, from))}<mark class="source-mark">${escapeHtml(text.slice(from, to))}</mark>${escapeHtml(text.slice(to))}`;
+});
 
 /* ── 校对显示层 ───────────────────────────────────────────────────────── */
 
@@ -247,6 +282,21 @@ function refreshAll() {
   });
 }
 
+/* 从搜索结果跳过来时：把原文栏滚到命中处，抄写区跟着走 ——
+   不然用户得自己在几百行里找那个词。 */
+watch(() => state.sourceHighlight, mark => {
+  if (!mark || mark.at == null || mark.at < 0) return;
+  nextTick(() => {
+    const pane = sourcePane.value;
+    const track = sourceTrack.value;
+    if (!pane || !track) return;
+    const element = track.querySelector('.source-mark');
+    if (!element) return;
+    pane.scrollTop = Math.max(0, element.offsetTop - pane.clientHeight / 3);
+    if (writingArea.value) writingArea.value.scrollTop = pane.scrollTop;
+  });
+});
+
 watch(() => [state.bookId, state.chapterIndex], refreshAll);
 watch(() => state.fontSize, () => {
   if (writingArea.value) writingArea.value.style.fontSize = `${state.fontSize}px`;
@@ -304,6 +354,8 @@ defineExpose({ focusWriting, refreshAll });
             <div class="toolbar-divider"></div>
             <button class="toolbar-button" :class="{ active: state.settings.punctLenient }" type="button"
                     @click="togglePunct">± 标点宽松</button>
+            <button class="toolbar-button" :class="{ active: proofOpen }" type="button"
+                    @click="proofOpen = !proofOpen">✓ <span>校对清单</span></button>
             <div class="toolbar-spacer"></div>
             <span class="copy-mode">
               <span class="mode-dot" :class="{ live: practice.active }"></span>
@@ -317,23 +369,40 @@ defineExpose({ focusWriting, refreshAll });
             <span class="sentence-meta">{{ sentence.meta }}</span>
           </div>
 
+          <div v-show="proofOpen" class="proof-panel">
+            <div class="proof-head">
+              <span>校对清单</span>
+              <span class="proof-count">{{ diffs.length ? `${diffs.length} 处偏差` : '没有偏差' }}</span>
+              <button class="close-button" type="button" aria-label="收起校对清单" @click="proofOpen = false">×</button>
+            </div>
+            <div class="proof-list">
+              <p v-if="!diffs.length" class="proof-empty">这一段没发现偏差。</p>
+              <button v-for="item in diffs" :key="item.index" class="proof-row" type="button" @click="jumpTo(item.index)">
+                <span class="proof-line">第 {{ item.line + 1 }} 行</span>
+                <span class="proof-expected">{{ item.expected || '（多写的）' }}</span>
+                <span class="proof-arrow">←</span>
+                <span class="proof-typed">{{ item.typed }}</span>
+              </button>
+            </div>
+          </div>
+
           <div class="copy-body">
             <div class="source-column">
               <div class="column-label"><span>原文</span></div>
-              <div ref="sourcePane" class="source-text" :style="{ fontSize: state.fontSize + 'px' }">
-                <pre ref="sourceTrack" class="source-track">{{ chapter.content }}</pre>
+              <div id="sourceText" ref="sourcePane" class="source-text" :style="{ fontSize: state.fontSize + 'px' }">
+                <pre id="sourceTrack" ref="sourceTrack" class="source-track" v-html="sourceHtml"></pre>
               </div>
             </div>
             <div class="writing-column">
               <div class="column-label"><span>你的抄写</span><small>{{ hasWrittenText(getWritten(chapter)) ? '正在校对' : '点击右侧开始输入' }}</small></div>
               <div class="writing-stage" :style="{ fontSize: state.fontSize + 'px' }">
-                <div ref="writingPaper" class="writing-paper">
-                  <div ref="typingDisplay" class="typing-display" aria-hidden="true"></div>
-                  <textarea ref="writingArea" spellcheck="false" aria-label="抄写输入区"
+                <div id="writingPaper" ref="writingPaper" class="writing-paper">
+                  <div id="typingDisplay" ref="typingDisplay" class="typing-display" aria-hidden="true"></div>
+                  <textarea id="writingArea" ref="writingArea" spellcheck="false" aria-label="抄写输入区"
                             @input="handleInput" @keydown="handleKeydown"
                             @scroll="handleWritingScroll" @click="updateSentence"
                             @keyup="updateSentence" @select="updateSentence"></textarea>
-                  <div ref="caretGuide" class="caret-guide">从这里开始，把文字写进时间里。</div>
+                  <div id="caretGuide" ref="caretGuide" class="caret-guide">从这里开始，把文字写进时间里。</div>
                 </div>
               </div>
             </div>

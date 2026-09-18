@@ -1,0 +1,4 @@
+{
+  "//": "这里的脚本是 Node 的 CommonJS（require / module.exports）。项目根的 package.json 是 ESM（给 Vite 用），这个文件把 verify/ 划回 CommonJS —— 否则 cdp-attach.js 与 test-*.js 一跑就报 'require is not defined'。",
+  "type": "commonjs"
+}
