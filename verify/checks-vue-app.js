@@ -274,6 +274,15 @@
     && getComputedStyle(badSpan).color === 'rgb(195, 72, 62)',
     { ok: okSpan ? getComputedStyle(okSpan).color : null,
       bad: badSpan ? getComputedStyle(badSpan).color : null });
+
+  /* 手感：打字时只该动变化的那个字，不能把整段 DOM 重建一遍。
+     这里用"节点有没有被复用"来验 —— 比测耗时稳定，不受机器快慢影响。 */
+  const probeSpan = $(D, '#typedLayer span');
+  if (probeSpan) probeSpan.dataset.probe = 'keep';
+  typeInto(area, `${source.slice(0, 8)}错`);
+  await wait(400);
+  record('打字只改变化的字，不重建整段 DOM（增量渲染）',
+    Boolean(probeSpan) && Boolean($(D, '#typedLayer span[data-probe="keep"]')), {});
   record('侧栏「已抄写」随输入更新', /9\s*字/.test(metricAt(0)), { text: metricAt(0) });
   record('侧栏「错误字数」标出那一个错字', /1\s*字/.test(metricAt(3)), { text: metricAt(3) });
   record('第一次输入就建立了会话（时长开始走）',

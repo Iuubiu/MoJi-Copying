@@ -30,7 +30,6 @@ const caretGuide = ref(null);
 
 const chapter = computed(() => currentChapter.value);
 const sentence = ref({ text: '', meta: '' });
-const selection = ref({ start: 0, end: 0 });
 const proofOpen = ref(false);
 
 /* ── 校对清单 ─────────────────────────────────────────────────────────── */
@@ -83,6 +82,49 @@ function renderGhost() {
   if (ghost.textContent !== next) ghost.textContent = next;
 }
 
+/* ── 渲染：增量更新 ─────────────────────────────────────────────────────
+ *
+ * 以前是每次按键把整段 innerHTML 重写一遍。两千字的章节就是两千个节点，
+ * 每按一下全部重建 —— JS 只花两三毫秒，但后面跟着的样式重算和布局才是
+ * 真正让手感觉涩的地方。
+ *
+ * 现在：先找出"从哪个字开始不一样"，只动那之后的 span；节点多了删、少了补，
+ * 前面的一个字都不碰。在末尾打字时，这个位置就是末尾 —— 一次只改一个 span。
+ */
+let renderedWritten = '';        // 上次渲染的内容，用来定位差异
+let renderedSource = '';         // 上次渲染的原文（换章就整体重来）
+let renderedLenient = null;      // 标点宽严变了，之前的颜色不算数
+let selectedRange = [0, 0];      // 上一次的高亮范围，用来擦干净
+let renderScheduled = false;
+
+function firstDiff(a, b) {
+  const limit = Math.min(a.length, b.length);
+  let index = 0;
+  while (index < limit && a[index] === b[index]) index += 1;
+  return index;
+}
+
+/** 只更新"选中高亮"：拖选、点选都走这里，不必重建整段文字。 */
+function renderSelection() {
+  const element = typedLayer.value;
+  const area = writingArea.value;
+  if (!element || !area) return;
+  const spans = element.children;
+
+  const [prevFrom, prevTo] = selectedRange;
+  for (let index = prevFrom; index < prevTo && index < spans.length; index += 1) {
+    spans[index].classList.remove('selected');
+  }
+
+  const [from, to] = area.selectionStart !== area.selectionEnd
+    ? [area.selectionStart, area.selectionEnd].sort((a, b) => a - b)
+    : [0, 0];
+  for (let index = from; index < to && index < spans.length; index += 1) {
+    spans[index].classList.add('selected');
+  }
+  selectedRange = [from, to];
+}
+
 /** 你写的那一层：逐字铺成彩色文字 —— 对的黑色、错的红色，写得比原文长也照样显示。 */
 function renderTypedDisplay() {
   const element = typedLayer.value;
@@ -92,24 +134,46 @@ function renderTypedDisplay() {
   const written = area.value;
   const lenient = state.settings.punctLenient;
 
-  const parts = [];
-  for (let index = 0; index < written.length; index += 1) {
+  /* 换过章节、或者改过标点宽严：之前算好的颜色不作数，整体重来一次 */
+  if (lenient !== renderedLenient || source !== renderedSource) {
+    element.replaceChildren();
+    renderedWritten = '';
+    renderedLenient = lenient;
+    renderedSource = source;
+    selectedRange = [0, 0];
+  }
+
+  const from = firstDiff(renderedWritten, written);
+  const spans = element.children;
+
+  /* 多退少补。注意是逐个增删而不是重写 innerHTML —— 已有节点全留着 */
+  while (spans.length > written.length) spans[spans.length - 1].remove();
+  while (spans.length < written.length) element.appendChild(document.createElement('span'));
+
+  for (let index = from; index < written.length; index += 1) {
+    const span = spans[index];
     const typed = written[index];
+    if (span.textContent !== typed) span.textContent = typed;
     /* 写到原文以外的地方算"多写的"，一样标红 */
     const ok = index < source.length && charsMatch(source[index], typed, lenient);
-    parts.push(`<span class="${ok ? 'ok' : 'bad'}">${escapeHtml(typed)}</span>`);
+    const want = ok ? 'ok' : 'bad';
+    if (span.className !== want) span.className = want;
   }
-  element.innerHTML = parts.join('');
+  renderedWritten = written;
+  selectedRange = [0, 0];          // span 刚动过，旧的高亮痕迹不作数了
+  renderSelection();
+}
 
-  const selected = area.selectionStart !== area.selectionEnd;
-  if (selected) {
-    const [from, to] = [area.selectionStart, area.selectionEnd].sort((a, b) => a - b);
-    /* 这一层里全是逐字的 span，下标就是正文下标，直接照着高亮 */
-    const spans = element.querySelectorAll('span');
-    for (let index = from; index < to && index < spans.length; index += 1) {
-      spans[index].classList.add('selected');
-    }
-  }
+/** 校对层 / 提示条 / 纸面高度：一帧只做一次，连打时不会被每一下都触发。 */
+function scheduleRender() {
+  if (renderScheduled) return;
+  renderScheduled = true;
+  requestAnimationFrame(() => {
+    renderScheduled = false;
+    renderTypedDisplay();
+    refreshCaretGuide();
+    syncPaneLayout();
+  });
 }
 
 function escapeHtml(value) {
@@ -198,10 +262,8 @@ function handleInput() {
   if (!practice.active && next.length) beginSession(previousLength);
 
   chapter.value.written = next;
-  renderTypedDisplay();
-  refreshCaretGuide();
-  nextTick(syncPaneLayout);
-  updateSentence();
+  scheduleRender();              // 校对层 + 提示条 + 纸面高度：一帧只做一次
+  updateSentence();              // 当前句和高亮很便宜，同步更新更跟手
   scheduleIdleFlush();
   scheduleProgressSave();
 }
@@ -267,14 +329,15 @@ function refreshCaretGuide() {
 function updateSentence() {
   const area = writingArea.value;
   if (!area || !chapter.value) return;
-  const { start, end } = { start: area.selectionStart, end: area.selectionEnd };
-  selection.value = { start, end };
+  const start = area.selectionStart;
   const info = sentenceAt(chapter.value.content, start);
   sentence.value = {
     text: info.text || '把光标放进正文，这里会显示你正在抄的那一句。',
     meta: `${MojiStats.formatNumber(info.start)} – ${MojiStats.formatNumber(info.end)} 字 · 第 ${Math.max(1, (chapter.value.content.slice(0, start).split('\n').length))} 行`,
   };
-  renderTypedDisplay();
+  /* 这里只要刷新高亮，不能重建整段 —— 以前它又调了一次全量渲染，
+     等于每按一下键把整章铺了两遍。 */
+  renderSelection();
 }
 
 /* ── 指标 ─────────────────────────────────────────────────────────────── */
